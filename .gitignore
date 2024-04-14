@@ -3,5 +3,6 @@
 .cache
 .idea/*
 venv/*
+midis/*
 **/__pycache__/*
 assets/soundfont.sf2

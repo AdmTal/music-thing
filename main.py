@@ -17,9 +17,29 @@ BALL_COLOR = "#e9e9fc"
 HIT_SHRINK = 0.2
 HIT_ANIMATION_LENGTH = 10
 
+SCREEN_WIDTH = 1088
+SCREEN_HEIGHT = 1920
+
+BALL_START_X = SCREEN_WIDTH // 2
+BALL_START_Y = SCREEN_HEIGHT // 2
+BALL_SIZE = 150
+BALL_SPEED = 25
+MIDI_FILE = "wii-music.mid"
+FPS = 60
+FRAME_BUFFER = 15
+
 
 class BadSimulaiton(Exception):
     pass
+
+
+def animate_throb(n, peak=HIT_ANIMATION_LENGTH // 2, width=HIT_ANIMATION_LENGTH):
+    # Calculate the cycle midpoint based on the specified width
+    midpoint = width // 2
+    # Calculate the current position in the cycle using modulo operation
+    position_in_cycle = abs((n - 1) % width - midpoint)
+    # Generate the triangular value based on distance from midpoint
+    return peak - position_in_cycle
 
 
 def fade_color(start_color_hex, dest_color_hex, num_frames, curr_frame_number):
@@ -102,19 +122,22 @@ class Ball(Thing):
         # Calculate the size reduction effect
         if self.size_fade_frames_remaining > 0:
             factor = 1 - HIT_SHRINK * (
-                    self.size_fade_frames_remaining / HIT_ANIMATION_LENGTH
+                animate_throb(self.size_fade_frames_remaining) / HIT_ANIMATION_LENGTH
             )
+            spacer_factor = 1 - factor
             self.current_size = int(self.original_size * factor)
+            spacer = int(self.current_size * spacer_factor)
             self.size_fade_frames_remaining -= 1
+            left = self.x_coord - offset_x + spacer
+            right = self.x_coord - offset_x + self.current_size
+            top = self.y_coord - offset_y + spacer
+            bottom = self.y_coord - offset_y + self.current_size
         else:
             self.current_size = self.original_size
-
-        # Draw the square with transparent fill and colored border
-        half_size = self.current_size
-        left = self.x_coord - offset_x - half_size
-        right = self.x_coord - offset_x + half_size
-        top = self.y_coord - offset_y - half_size
-        bottom = self.y_coord - offset_y + half_size
+            left = self.x_coord - offset_x
+            right = self.x_coord - offset_x + self.current_size
+            top = self.y_coord - offset_y
+            bottom = self.y_coord - offset_y + self.current_size
         draw.rectangle(
             [left, top, right, bottom],
             outline=self.get_color(),
@@ -161,12 +184,12 @@ class Ball(Thing):
 
             # Check if the ball's next position overlaps with the platform
             if all(
-                    [
-                        ball_right > plat_left,
-                        ball_left < plat_right,
-                        ball_bottom > plat_top,
-                        ball_top < plat_bottom,
-                    ]
+                [
+                    ball_right >= plat_left,
+                    ball_left <= plat_right,
+                    ball_bottom >= plat_top,
+                    ball_top <= plat_bottom,
+                ]
             ):
                 # Calculate the overlap on each side
                 overlap_left = ball_right - plat_left
@@ -203,7 +226,7 @@ class Ball(Thing):
 
                 platform.set_expected_bounce_frame(frame)
                 hit_platform = platform
-                ball.hit()
+                self.hit()
                 break
 
         # Update the ball's position with the potentially new speed
@@ -215,12 +238,12 @@ class Ball(Thing):
 
 class Scene:
     def __init__(
-            self,
-            screen_width,
-            screen_height,
-            ball,
-            bounce_frames=[],
-            platform_orientations={},
+        self,
+        screen_width,
+        screen_height,
+        ball,
+        bounce_frames=[],
+        platform_orientations={},
     ):
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -248,10 +271,12 @@ class Scene:
             # Get the ball's next frame position
             future_x, future_y = self.ball.predict_position(1)
 
-            PWIDTH = ball.width // 2
-            PHEIGHT = ball.height * 2
+            # Platform - oriented vertical
+            PWIDTH = self.ball.width // 3
+            PHEIGHT = self.ball.height * 2
             choice = self._platform_orientations[self.frame_count]
             if choice:
+                # Platform - oriented horizontal
                 PWIDTH, PHEIGHT = PHEIGHT, PWIDTH
 
             # Adjust placement to ensure collision
@@ -276,19 +301,19 @@ class Scene:
 
         # Move the ball
         hit_platform = self.ball.move(self.platforms, self.frame_count)
-        if self._platforms_set:
-            if not hit_platform and self.frame_count in self._platform_expectations:
-                raise BadSimulaiton(
-                    f"Bounce should have happened on {self.frame_count} but did not"
-                )
-            if (
-                    hit_platform
-                    and self.frame_count != hit_platform.expected_bounce_frame()
-            ):
-                raise BadSimulaiton(
-                    f"A platform was hit on the wrong frame {self.frame_count}"
-                )
         self.adjust_camera()
+
+        if not self._platforms_set:
+            return
+
+        if not hit_platform and self.frame_count in self._platform_expectations:
+            raise BadSimulaiton(
+                f"Bounce should have happened on {self.frame_count} but did not"
+            )
+        if hit_platform and self.frame_count != hit_platform.expected_bounce_frame():
+            raise BadSimulaiton(
+                f"A platform was hit on the wrong frame {self.frame_count}"
+            )
 
     def render(self) -> Image:
         image = Image.new("RGB", (self.screen_width, self.screen_height), BG_COLOR)
@@ -311,14 +336,14 @@ class Scene:
 
     def render_platforms_image(self):
         if not self.platforms:
-            return None  # No platforms to render
+            return None
 
         # Determine the size of the image needed
         max_x = max((p.x_coord + p.width) for p in self.platforms)
         max_y = max((p.y_coord + p.height) for p in self.platforms)
 
         # Create an image large enough to hold all platforms
-        image = Image.new('RGB', (int(max_x), int(max_y)), BG_COLOR)
+        image = Image.new("RGB", (int(max_x), int(max_y)), BG_COLOR)
         draw = ImageDraw.Draw(image)
 
         # Draw each platform
@@ -336,79 +361,86 @@ class Scene:
         return image
 
 
-SCREEN_WIDTH = 1088
-SCREEN_HEIGHT = 1920
+def generate_random_platforms(frames_where_notes_happen):
+    return {frame: random.choice([True, False]) for frame in frames_where_notes_happen}
 
-BALL_START_X = SCREEN_WIDTH // 2
-BALL_START_Y = SCREEN_HEIGHT // 2
-BALL_SIZE = 75
-BALL_SPEED = 30
-MIDI_FILE = "wii-music.mid"
-FPS = 60
-FRAME_BUFFER = 15
 
-frames_where_notes_happen = get_frames_where_notes_happen(MIDI_FILE, FPS, FRAME_BUFFER)
-NUM_FRAMES = max(frames_where_notes_happen) // 10
-click.echo(f"{MIDI_FILE} requires {NUM_FRAMES} frames")
+@click.command()
+@click.option(
+    "--midi",
+    required=True,
+    default=MIDI_FILE,
+    type=click.Path(exists=True),
+    help="Path to a MIDI file.",
+)
+def main(midi):
+    frames_where_notes_happen = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
+    NUM_FRAMES = max(frames_where_notes_happen) // 10
+    click.echo(f"{midi} requires {NUM_FRAMES} frames")
 
-click.echo(f"Choose random platform orientations...")
-choices = {frame: random.choice([True, False]) for frame in frames_where_notes_happen}
-click.echo(f"Simulate platform orientations until a good one is found...")
-valid = False
-simulation_num = 0
-while not valid:
-    simulation_num += 1
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices)
-    for _ in range(NUM_FRAMES):
-        scene.update()
-
-    # Check Valid
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-    platforms = scene.platforms
-    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
-    scene.set_platforms(platforms)
-    try:
+    click.echo(f"Choose random platform orientations...")
+    choices = generate_random_platforms(frames_where_notes_happen)
+    click.echo(f"Simulate platform orientations until a good one is found...")
+    valid = False
+    simulation_num = 0
+    while not valid:
+        simulation_num += 1
+        ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+        scene = Scene(
+            SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices
+        )
         for _ in range(NUM_FRAMES):
             scene.update()
-    except BadSimulaiton as err:
-        click.echo(f"\rSimulation {simulation_num} Failed :: {err}{' ' * 10}", nl=False)
-        choices = {
-            frame: random.choice([True, False]) for frame in frames_where_notes_happen
-        }
-        continue
 
-    valid = True
+        # Check Valid
+        ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+        platforms = scene.platforms
+        scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
+        scene.set_platforms(platforms)
+        try:
+            for _ in range(NUM_FRAMES):
+                scene.update()
+        except BadSimulaiton as err:
+            click.echo(
+                f"\rSimulation {simulation_num} Failed :: {err}{' ' * 10}", nl=False
+            )
+            choices = generate_random_platforms(frames_where_notes_happen)
+            continue
 
-click.echo(f"\nRun the simulation again - with the platforms already in place")
-platforms = scene.platforms
-ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
-scene.set_platforms(platforms)
+        valid = True
 
-VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
-writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
-for curr in range(NUM_FRAMES):
-    try:
-        scene.update()
-    except BadSimulaiton as err:
-        click.echo(f"BAD {scene.frame_count} :: {err}")
-    image = scene.render()
-    writer.append_data(np.array(image))
-    progress = (scene.frame_count / NUM_FRAMES) * 100
-    click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
+    click.echo(f"\nRun the simulation again - with the platforms already in place")
+    platforms = scene.platforms
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
+    scene.set_platforms(platforms)
 
-writer.close()
+    # scene.render_platforms_image().show()
 
-click.echo(f"Generate the video")
+    VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
+    writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
+    for curr in range(NUM_FRAMES):
+        try:
+            scene.update()
+        except BadSimulaiton as err:
+            click.echo(f"BAD {scene.frame_count} :: {err}")
+        image = scene.render()
+        writer.append_data(np.array(image))
+        progress = (scene.frame_count / NUM_FRAMES) * 100
+        click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
 
-finalize_video_with_music(
-    writer,
-    VIDEO_FILE,
-    "final",
-    MIDI_FILE,
-    FPS,
-    SOUND_FONT_FILE_BETTER,
-    scene.frame_count,
-    FRAME_BUFFER,
-)
+    click.echo(f"Generate the video")
+    finalize_video_with_music(
+        writer,
+        VIDEO_FILE,
+        "final",
+        midi,
+        FPS,
+        SOUND_FONT_FILE_BETTER,
+        scene.frame_count,
+        FRAME_BUFFER,
+    )
+
+
+if __name__ == "__main__":
+    main()

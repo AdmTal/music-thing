@@ -12,6 +12,8 @@ I'll prob give this a few more hours over the next couple of weeks and then move
 
 If anyone already knows of an open source repo that makes these videos already, please let me know.
 
+You can run this with any MIDI file
+
 # How to Run
 
 1. Install the "soundfont" file found here: https://www.doomworld.com/forum/topic/98376-recommended-soundfonts/?tab=comments#comment-1827928)
@@ -23,4 +25,15 @@ python3 -m venv venv
 pip install -r requirements.txt
 source venv/bin/activate
 python main.py
+```
+
+### Help
+
+```shell
+python main.py --help
+Usage: main.py [OPTIONS]
+
+Options:
+  --midi PATH  Path to a MIDI file.  [required]
+  --help       Show this message and exit.
 ```
