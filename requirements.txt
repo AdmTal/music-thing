@@ -1,0 +1,9 @@
+click==8.1.7
+imageio==2.34.0
+imageio-ffmpeg==0.4.9
+numpy==1.26.4
+pillow==10.3.0
+pretty-midi==0.2.10
+moviepy==1.0.3
+pydub==0.25.1
+midi2audio==0.1.1

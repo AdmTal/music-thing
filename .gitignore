@@ -1,0 +1,7 @@
+.cache/*
+*.mp4
+.cache
+.idea/*
+venv/*
+**/__pycache__/*
+assets/soundfont.sf2
