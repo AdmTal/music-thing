@@ -1,4 +1,5 @@
 from PIL import Image, ImageDraw
+import click
 import imageio
 import numpy as np
 import random
@@ -60,12 +61,12 @@ class Ball(Thing):
             plat_top = platform.y_coord
             plat_bottom = platform.y_coord + platform.height
             if all(
-                [
-                    ball_right > plat_left,
-                    ball_left < plat_right,
-                    ball_bottom > plat_top,
-                    ball_top < plat_bottom,
-                ]
+                    [
+                        ball_right > plat_left,
+                        ball_left < plat_right,
+                        ball_bottom > plat_top,
+                        ball_top < plat_bottom,
+                    ]
             ):
                 overlap_left = ball_right - plat_left
                 overlap_right = plat_right - ball_left
@@ -116,8 +117,8 @@ class Scene:
             future_x, future_y = self.ball.predict_position(1)
 
             # Randomly choose orientation
-            PWIDTH = ball.width // 2
-            PHEIGHT = ball.height * 1.5
+            PWIDTH = ball.width // 4
+            PHEIGHT = ball.height * 2
             if random.choice([True, False, False, False]):
                 PWIDTH, PHEIGHT = PHEIGHT, PWIDTH
 
@@ -170,24 +171,26 @@ SCREEN_HEIGHT = 1920
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
-BALL_SIZE = 50
+BALL_SIZE = 100
 BALL_COLOR = "red"
-BALL_SPEED = 25
+BALL_SPEED = 20
 MIDI_FILE = "wii-music.mid"
 FPS = 60
 FRAME_BUFFER = 15
+
 frames_where_notes_happen = get_frames_where_notes_happen(MIDI_FILE, FPS, FRAME_BUFFER)
+NUM_FRAMES = max(frames_where_notes_happen)
+click.echo(f"{MIDI_FILE} requires {NUM_FRAMES} frames")
+
 ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
 scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen)
 
-NUM_FRAMES = 500
-
 # Run simulation to place the Platforms
+click.echo(f"Run... simulation to place the Platforms")
 for _ in range(NUM_FRAMES):
     scene.update()
 
-# Run the simulation again - with the platforms already in place
-# and record the video
+click.echo(f"Run the simulation again - with the platforms already in place")
 platforms = scene.platforms
 ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
 scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
@@ -195,12 +198,16 @@ scene.set_platforms(platforms)
 
 VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
 writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
-for _ in range(NUM_FRAMES):
+for curr in range(NUM_FRAMES):
     scene.update()
     image = scene.render()
     writer.append_data(np.array(image))
+    progress = (scene.frame_count / NUM_FRAMES) * 100
+    click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
 
 writer.close()
+
+click.echo(f"Generate the video")
 finalize_video_with_music(
     writer,
     VIDEO_FILE,
