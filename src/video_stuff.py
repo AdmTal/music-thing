@@ -1,5 +1,6 @@
 import os
 import time
+import subprocess
 
 import click
 from moviepy.editor import VideoFileClip, AudioFileClip
@@ -49,6 +50,8 @@ def finalize_video_with_music(
     timestamp = int(time.time())
     final_output_path = f"{output_file_name}_{timestamp}.mp4"
     final_video.write_videofile(final_output_path, codec="libx264", audio_codec="aac")
+
+    subprocess.run(["open", final_output_path])
 
     cleanup_cache_dir(get_cache_dir())
 

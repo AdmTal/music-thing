@@ -11,9 +11,37 @@ from src.midi_stuff import (
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir
 
+BG_COLOR = "#494a73"
+PADDLE_COLOR = "#110c1d"
+BALL_COLOR = "#e9e9fc"
+HIT_SHRINK = 0.2
+HIT_ANIMATION_LENGTH = 10
+
 
 class BadSimulaiton(Exception):
     pass
+
+
+def fade_color(start_color_hex, dest_color_hex, num_frames, curr_frame_number):
+    # Extract RGB components from hexadecimal color values
+    r_start, g_start, b_start = (
+        int(start_color_hex[1:3], 16),
+        int(start_color_hex[3:5], 16),
+        int(start_color_hex[5:7], 16),
+    )
+    r_end, g_end, b_end = (
+        int(dest_color_hex[1:3], 16),
+        int(dest_color_hex[3:5], 16),
+        int(dest_color_hex[5:7], 16),
+    )
+
+    # Calculate the current color's RGB values using linear interpolation
+    r_curr = int(r_start + (r_end - r_start) * (curr_frame_number / num_frames))
+    g_curr = int(g_start + (g_end - g_start) * (curr_frame_number / num_frames))
+    b_curr = int(b_start + (b_end - b_start) * (curr_frame_number / num_frames))
+
+    # Return the current color in hexadecimal format
+    return f"#{r_curr:02x}{g_curr:02x}{b_curr:02x}"
 
 
 class Thing:
@@ -24,6 +52,9 @@ class Thing:
         self.height = height
         self.color = color
 
+    def get_color(self):
+        return self.color
+
     def render(self, image, offset_x, offset_y):
         draw = ImageDraw.Draw(image)
         draw.rectangle(
@@ -33,7 +64,7 @@ class Thing:
                 self.x_coord + self.width - offset_x,
                 self.y_coord + self.height - offset_y,
             ],
-            fill=self.color,
+            fill=self.get_color(),
         )
 
 
@@ -56,6 +87,52 @@ class Ball(Thing):
         super().__init__(x_coord, y_coord, size, size, color)
         self.x_speed = speed
         self.y_speed = speed
+        self.color_fade_frames_remaining = 0
+        self.size_fade_frames_remaining = 0
+        self.original_color = color
+        self.original_size = size
+        self.current_size = size
+
+    def hit(self):
+        self.color_fade_frames_remaining = HIT_ANIMATION_LENGTH
+        self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
+
+    def render(self, image, offset_x, offset_y):
+        draw = ImageDraw.Draw(image)
+        # Calculate the size reduction effect
+        if self.size_fade_frames_remaining > 0:
+            factor = 1 - HIT_SHRINK * (
+                    self.size_fade_frames_remaining / HIT_ANIMATION_LENGTH
+            )
+            self.current_size = int(self.original_size * factor)
+            self.size_fade_frames_remaining -= 1
+        else:
+            self.current_size = self.original_size
+
+        # Draw the square with transparent fill and colored border
+        half_size = self.current_size
+        left = self.x_coord - offset_x - half_size
+        right = self.x_coord - offset_x + half_size
+        top = self.y_coord - offset_y - half_size
+        bottom = self.y_coord - offset_y + half_size
+        draw.rectangle(
+            [left, top, right, bottom],
+            outline=self.get_color(),
+            fill=None,
+            width=10,
+        )
+
+    def get_color(self):
+        if self.color_fade_frames_remaining > 0:
+            faded_color = fade_color(
+                "#ffffff",
+                self.original_color,
+                HIT_ANIMATION_LENGTH,
+                self.color_fade_frames_remaining,
+            )
+            self.color_fade_frames_remaining -= 1
+            return faded_color
+        return self.original_color
 
     def predict_position(self, frames):
         future_x = self.x_coord + self.x_speed * frames
@@ -126,6 +203,7 @@ class Ball(Thing):
 
                 platform.set_expected_bounce_frame(frame)
                 hit_platform = platform
+                ball.hit()
                 break
 
         # Update the ball's position with the potentially new speed
@@ -192,7 +270,7 @@ class Scene:
                 new_platform_y,
                 PWIDTH,
                 PHEIGHT,
-                "black",
+                PADDLE_COLOR,
             )
             self.platforms.append(new_platform)
 
@@ -200,13 +278,20 @@ class Scene:
         hit_platform = self.ball.move(self.platforms, self.frame_count)
         if self._platforms_set:
             if not hit_platform and self.frame_count in self._platform_expectations:
-                raise BadSimulaiton(f"Bounce should have happened on {self.frame_count} but did not")
-            if hit_platform and self.frame_count != hit_platform.expected_bounce_frame():
-                raise BadSimulaiton(f"A platform was hit on the wrong frame {self.frame_count}")
+                raise BadSimulaiton(
+                    f"Bounce should have happened on {self.frame_count} but did not"
+                )
+            if (
+                    hit_platform
+                    and self.frame_count != hit_platform.expected_bounce_frame()
+            ):
+                raise BadSimulaiton(
+                    f"A platform was hit on the wrong frame {self.frame_count}"
+                )
         self.adjust_camera()
 
     def render(self) -> Image:
-        image = Image.new("RGB", (self.screen_width, self.screen_height), "white")
+        image = Image.new("RGB", (self.screen_width, self.screen_height), BG_COLOR)
         self.ball.render(image, self.offset_x, self.offset_y)
         for platform in self.platforms:
             platform.render(image, self.offset_x, self.offset_y)
@@ -224,15 +309,40 @@ class Scene:
         elif self.ball.y_coord - self.offset_y > self.screen_height - edge_y:
             self.offset_y = self.ball.y_coord - (self.screen_height - edge_y)
 
+    def render_platforms_image(self):
+        if not self.platforms:
+            return None  # No platforms to render
+
+        # Determine the size of the image needed
+        max_x = max((p.x_coord + p.width) for p in self.platforms)
+        max_y = max((p.y_coord + p.height) for p in self.platforms)
+
+        # Create an image large enough to hold all platforms
+        image = Image.new('RGB', (int(max_x), int(max_y)), BG_COLOR)
+        draw = ImageDraw.Draw(image)
+
+        # Draw each platform
+        for platform in self.platforms:
+            draw.rectangle(
+                [
+                    platform.x_coord,
+                    platform.y_coord,
+                    platform.x_coord + platform.width,
+                    platform.y_coord + platform.height,
+                ],
+                fill=platform.get_color(),
+            )
+
+        return image
+
 
 SCREEN_WIDTH = 1088
 SCREEN_HEIGHT = 1920
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
-BALL_SIZE = 100
-BALL_COLOR = "red"
-BALL_SPEED = 15
+BALL_SIZE = 75
+BALL_SPEED = 30
 MIDI_FILE = "wii-music.mid"
 FPS = 60
 FRAME_BUFFER = 15
@@ -270,7 +380,7 @@ while not valid:
 
     valid = True
 
-click.echo(f"Run the simulation again - with the platforms already in place")
+click.echo(f"\nRun the simulation again - with the platforms already in place")
 platforms = scene.platforms
 ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
 scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
@@ -291,6 +401,7 @@ for curr in range(NUM_FRAMES):
 writer.close()
 
 click.echo(f"Generate the video")
+
 finalize_video_with_music(
     writer,
     VIDEO_FILE,
