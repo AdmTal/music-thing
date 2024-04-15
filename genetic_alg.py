@@ -276,7 +276,7 @@ class Scene:
 
             # Platform - oriented vertical
             PWIDTH = self.ball.width // 3
-            PHEIGHT = self.ball.height * 2
+            PHEIGHT = self.ball.height
             choice = self._platform_orientations[self.frame_count]
             if choice:
                 # Platform - oriented horizontal
@@ -284,14 +284,13 @@ class Scene:
 
             # Adjust placement to ensure collision
             if self.ball.x_speed > 0:
-                new_platform_x = future_x + PHEIGHT / 2
+                new_platform_x = future_x + PHEIGHT
             else:
-                new_platform_x = future_x - PHEIGHT / 2
+                new_platform_x = future_x - PHEIGHT
             if self.ball.y_speed > 0:
-                new_platform_y = future_y + PWIDTH / 2
+                new_platform_y = future_y + PWIDTH
             else:
-                new_platform_y = future_y - PWIDTH / 2
-
+                new_platform_y = future_y - PWIDTH
             # Create and add the new platform
             new_platform = Platform(
                 new_platform_x,
@@ -365,7 +364,19 @@ class Scene:
 
 
 def generate_random_solution(frames_where_notes_happen):
-    return {frame: random.choice([True, False]) for frame in frames_where_notes_happen}
+    platforms = {}
+    frames_list = list(frames_where_notes_happen)
+    i = 0
+    while i < len(frames_list):
+        current_state = random.choice([True, False])
+        repeat_count = random.randint(1, 10)
+
+        for _ in range(repeat_count):
+            if i < len(frames_list):
+                platforms[frames_list[i]] = current_state
+                i += 1
+
+    return platforms
 
 
 def get_score_for_solution(solution, frames_where_notes_happen):

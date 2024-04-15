@@ -273,7 +273,7 @@ class Scene:
 
             # Platform - oriented vertical
             PWIDTH = self.ball.width // 3
-            PHEIGHT = self.ball.height * 2
+            PHEIGHT = self.ball.height
             choice = self._platform_orientations[self.frame_count]
             if choice:
                 # Platform - oriented horizontal
@@ -281,14 +281,13 @@ class Scene:
 
             # Adjust placement to ensure collision
             if self.ball.x_speed > 0:
-                new_platform_x = future_x + PHEIGHT / 2
+                new_platform_x = future_x + PHEIGHT
             else:
-                new_platform_x = future_x - PHEIGHT / 2
+                new_platform_x = future_x - PHEIGHT
             if self.ball.y_speed > 0:
-                new_platform_y = future_y + PWIDTH / 2
+                new_platform_y = future_y + PWIDTH
             else:
-                new_platform_y = future_y - PWIDTH / 2
-
+                new_platform_y = future_y - PWIDTH
             # Create and add the new platform
             new_platform = Platform(
                 new_platform_x,
@@ -387,7 +386,7 @@ def generate_random_platforms(frames_where_notes_happen):
 )
 def main(midi):
     frames_where_notes_happen = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
-    NUM_FRAMES = max(frames_where_notes_happen) // 3
+    NUM_FRAMES = max(frames_where_notes_happen) // 2
     click.echo(f"{midi} requires {NUM_FRAMES} frames")
 
     click.echo(f"Choose random platform orientations...")
@@ -427,7 +426,7 @@ def main(midi):
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
     scene.set_platforms(platforms)
 
-    # scene.render_platforms_image().show()
+    scene.render_platforms_image().show()
 
     VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
