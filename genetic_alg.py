@@ -4,6 +4,7 @@ import imageio
 import numpy as np
 import random
 
+
 from src.midi_stuff import (
     get_frames_where_notes_happen,
     SOUND_FONT_FILE_BETTER,
@@ -14,8 +15,8 @@ from src.cache_stuff import get_cache_dir
 BG_COLOR = "#494a73"
 PADDLE_COLOR = "#110c1d"
 BALL_COLOR = "#e9e9fc"
-HIT_SHRINK = 0.3
-HIT_ANIMATION_LENGTH = 8
+HIT_SHRINK = 0.2
+HIT_ANIMATION_LENGTH = 10
 
 SCREEN_WIDTH = 1088
 SCREEN_HEIGHT = 1920
@@ -23,10 +24,12 @@ SCREEN_HEIGHT = 1920
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 BALL_SIZE = 150
-BALL_SPEED = 30
+BALL_SPEED = 20
 MIDI_FILE = "wii-music.mid"
 FPS = 60
-FRAME_BUFFER = 0
+FRAME_BUFFER = 15
+
+GA_POPULATION_SIZE = 100
 
 
 class BadSimulaiton(Exception):
@@ -361,20 +364,65 @@ class Scene:
         return image
 
 
-def generate_random_platforms(frames_where_notes_happen):
-    platforms = {}
-    frames_list = list(frames_where_notes_happen)
-    i = 0
-    while i < len(frames_list):
-        current_state = random.choice([True, False])
-        repeat_count = random.randint(1, 10)
+def generate_random_solution(frames_where_notes_happen):
+    return {frame: random.choice([True, False]) for frame in frames_where_notes_happen}
 
-        for _ in range(repeat_count):
-            if i < len(frames_list):
-                platforms[frames_list[i]] = current_state
-                i += 1
 
-    return platforms
+def get_score_for_solution(solution, frames_where_notes_happen):
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    scene = Scene(
+        SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, solution
+    )
+    num_frames = max(frames_where_notes_happen)
+    for _ in range(num_frames):
+        scene.update()
+
+    # Check Valid
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    platforms = scene.platforms
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
+    scene.set_platforms(platforms)
+    score = 0
+    try:
+        for _ in range(num_frames):
+            scene.update()
+            score += 1
+    except BadSimulaiton as err:
+        return score, None
+
+    return float("inf"), scene
+
+
+def create_child(parent1, parent2):
+
+    child = {}
+    for key in parent1.keys():
+        if random.choice([True, False]):
+            child[key] = parent1[key]
+        else:
+            child[key] = parent2[key]
+
+    return child
+
+
+def mutate_dict(solution, mutation_rate=0.1):
+    """Mutate a dictionary solution by flipping its boolean values with a given mutation rate."""
+    return {
+        k: (not v if random.random() < mutation_rate else v)
+        for k, v in solution.items()
+    }
+
+
+def generate_new_population_dict(parent1, parent2, population_size):
+    """Generate a new population from two parent dictionary solutions."""
+    new_population = []
+    while len(new_population) < population_size:
+        # Generate two new children through crossover
+        child1 = create_child(parent1, parent2)
+        # Mutate children before adding them to the population
+        mutated_child1 = mutate_dict(child1)
+        new_population.extend([mutated_child1])
+    return new_population[:population_size]  # Ensure the population size is exact
 
 
 @click.command()
@@ -387,47 +435,56 @@ def generate_random_platforms(frames_where_notes_happen):
 )
 def main(midi):
     frames_where_notes_happen = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
-    NUM_FRAMES = max(frames_where_notes_happen) // 3
+    NUM_FRAMES = max(frames_where_notes_happen)
     click.echo(f"{midi} requires {NUM_FRAMES} frames")
 
-    click.echo(f"Choose random platform orientations...")
-    choices = generate_random_platforms(frames_where_notes_happen)
-    click.echo(f"Simulate platform orientations until a good one is found...")
-    valid = False
-    simulation_num = 0
-    while not valid:
-        simulation_num += 1
-        ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-        scene = Scene(
-            SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices
-        )
-        for _ in range(NUM_FRAMES):
-            scene.update()
+    click.echo(f"Perform genetic algorithm search...")
 
-        # Check Valid
-        ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-        platforms = scene.platforms
-        scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
-        scene.set_platforms(platforms)
-        try:
-            for _ in range(NUM_FRAMES):
-                scene.update()
-        except BadSimulaiton as err:
-            click.echo(
-                f"\rSimulation {simulation_num} Failed :: {err}{' ' * 10}", nl=False
+    # Generate Initial Population
+    candidate_solutions = [
+        generate_random_solution(frames_where_notes_happen)
+        for _ in range(GA_POPULATION_SIZE)
+    ]
+    click.echo(f"Generated {GA_POPULATION_SIZE} potential solutions...")
+    generation_num = 1
+    valid_scene = None
+    while valid_scene is None:
+        solutions = []
+        max_score = float("-inf")
+        click.echo(f"\n\tGeneration #{generation_num}:")
+        for idx, candidate_solution in enumerate(candidate_solutions):
+            score, valid_scene = get_score_for_solution(
+                candidate_solution,
+                frames_where_notes_happen,
             )
-            choices = generate_random_platforms(frames_where_notes_happen)
-            continue
+            max_score = max(score, max_score)
+            progress = ((idx + 1) / GA_POPULATION_SIZE) * 100
+            click.echo(
+                f"\r\t\tProgress {progress:0.0f}% -- MAX SCORE: {max_score}          ",
+                nl=False,
+            )
+            if valid_scene:
+                break
+            solutions.append((score, candidate_solution))
+        if valid_scene:
+            break
 
-        valid = True
+        generation_num += 1
+        solutions = sorted(solutions, key=lambda x: x[0])
+        sol_1 = solutions[0][1]
+        sol_2 = solutions[1][1]
+        candidate_solutions = generate_new_population_dict(
+            sol_1, sol_2, population_size=GA_POPULATION_SIZE
+        )
 
-    click.echo(f"\nRun the simulation again - with the platforms already in place")
-    platforms = scene.platforms
+    click.echo(f"\nValid solution found!")
+    click.echo(f"Run the simulation again - with the platforms already in place")
+    platforms = valid_scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
     scene.set_platforms(platforms)
 
-    # scene.render_platforms_image().show()
+    scene.render_platforms_image().show()
 
     VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
