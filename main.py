@@ -14,16 +14,16 @@ from src.cache_stuff import get_cache_dir
 BG_COLOR = "#494a73"
 PADDLE_COLOR = "#110c1d"
 BALL_COLOR = "#e9e9fc"
-HIT_SHRINK = 0.3
-HIT_ANIMATION_LENGTH = 8
+HIT_SHRINK = 0.2
+HIT_ANIMATION_LENGTH = 5
 
 SCREEN_WIDTH = 1088
 SCREEN_HEIGHT = 1920
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
-BALL_SIZE = 150
-BALL_SPEED = 30
+BALL_SIZE = 60
+BALL_SPEED = 15
 MIDI_FILE = "wii-music.mid"
 FPS = 60
 FRAME_BUFFER = 0
@@ -117,7 +117,7 @@ class Ball(Thing):
         self.color_fade_frames_remaining = HIT_ANIMATION_LENGTH
         self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
 
-    def render(self, image, offset_x, offset_y):
+    def render(self, image, offset_x=0, offset_y=0):
         draw = ImageDraw.Draw(image)
         # Calculate the size reduction effect
         if self.size_fade_frames_remaining > 0:
@@ -164,8 +164,8 @@ class Ball(Thing):
 
     def move(self, platforms, frame):
         # Calculate potential next position of the ball
-        next_x = self.x_coord + self.x_speed
-        next_y = self.y_coord + self.y_speed
+        next_x = self.x_coord
+        next_y = self.y_coord
         hit_platform = None
 
         # Check each platform for a possible collision
@@ -255,6 +255,7 @@ class Scene:
         self.offset_y = 0
         self._platforms_set = False
         self._platform_orientations = platform_orientations
+        self._ball_history = []
 
     def set_platforms(self, platforms):
         self._platforms_set = True
@@ -299,6 +300,13 @@ class Scene:
             self.platforms.append(new_platform)
 
         # Move the ball
+        if DEBUG_IMAGE:
+            self._ball_history.append(
+                (
+                    self.ball.x_coord,
+                    self.ball.y_coord,
+                )
+            )
         hit_platform = self.ball.move(self.platforms, self.frame_count)
         self.adjust_camera()
 
@@ -309,6 +317,12 @@ class Scene:
             raise BadSimulaiton(
                 f"Bounce should have happened on {self.frame_count} but did not"
             )
+        if DEBUG_IMAGE:
+            if (
+                hit_platform
+                and hit_platform.expected_bounce_frame() == self.frame_count
+            ):
+                hit_platform.color = "yellow"
         if hit_platform and self.frame_count != hit_platform.expected_bounce_frame():
             raise BadSimulaiton(
                 f"A platform was hit on the wrong frame {self.frame_count}"
@@ -333,6 +347,15 @@ class Scene:
         elif self.ball.y_coord - self.offset_y > self.screen_height - edge_y:
             self.offset_y = self.ball.y_coord - (self.screen_height - edge_y)
 
+    def draw_ball_history(self, image):
+        # Create an ImageDraw object
+        draw = ImageDraw.Draw(image)
+
+        # Draw the lines connecting each point in the coordinates list
+        draw.line(self._ball_history, fill=(255, 0, 0), width=2)
+
+        return image
+
     def render_platforms_image(self):
         if not self.platforms:
             return None
@@ -344,6 +367,8 @@ class Scene:
         # Create an image large enough to hold all platforms
         image = Image.new("RGB", (int(max_x), int(max_y)), BG_COLOR)
         draw = ImageDraw.Draw(image)
+
+        self.ball.render(image)
 
         # Draw each platform
         for platform in self.platforms:
@@ -357,7 +382,13 @@ class Scene:
                 fill=platform.get_color(),
             )
 
+        self.draw_ball_history(image)
+
         return image
+
+
+# def generate_random_platforms(frames_where_notes_happen):
+#     return {frame: random.choice([True, False]) for frame in frames_where_notes_happen}
 
 
 def generate_random_platforms(frames_where_notes_happen):
@@ -366,14 +397,15 @@ def generate_random_platforms(frames_where_notes_happen):
     i = 0
     while i < len(frames_list):
         current_state = random.choice([True, False])
-        repeat_count = random.randint(1, 10)
-
+        repeat_count = random.randint(1, 5)
         for _ in range(repeat_count):
             if i < len(frames_list):
                 platforms[frames_list[i]] = current_state
                 i += 1
-
     return platforms
+
+
+DEBUG_IMAGE = False
 
 
 @click.command()
@@ -386,7 +418,8 @@ def generate_random_platforms(frames_where_notes_happen):
 )
 def main(midi):
     frames_where_notes_happen = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
-    NUM_FRAMES = max(frames_where_notes_happen) // 2
+    # NUM_FRAMES = max(frames_where_notes_happen)
+    NUM_FRAMES = 500
     click.echo(f"{midi} requires {NUM_FRAMES} frames")
 
     click.echo(f"Choose random platform orientations...")
@@ -412,6 +445,9 @@ def main(midi):
             for _ in range(NUM_FRAMES):
                 scene.update()
         except BadSimulaiton as err:
+            if DEBUG_IMAGE:
+                scene.render_platforms_image().show()
+                input("\nContinue when ready >")
             click.echo(
                 f"\rSimulation {simulation_num} Failed :: {err}{' ' * 10}", nl=False
             )
@@ -426,7 +462,7 @@ def main(midi):
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
     scene.set_platforms(platforms)
 
-    scene.render_platforms_image().show()
+    # scene.render_platforms_image().show()
 
     VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
