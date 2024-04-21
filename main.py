@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageColor
 import click
 import imageio
 import numpy as np
@@ -62,6 +62,11 @@ def fade_color(start_color_hex, dest_color_hex, num_frames, curr_frame_number):
 
     # Return the current color in hexadecimal format
     return f"#{r_curr:02x}{g_curr:02x}{b_curr:02x}"
+
+
+def lerp(start, end, alpha):
+    """Linearly interpolates between start and end."""
+    return start + (end - start) * alpha
 
 
 class Thing:
@@ -148,7 +153,7 @@ class Ball(Thing):
     def get_color(self):
         if self.color_fade_frames_remaining > 0:
             faded_color = fade_color(
-                "#ffffff",
+                "#FFFFFF",
                 self.original_color,
                 HIT_ANIMATION_LENGTH,
                 self.color_fade_frames_remaining,
@@ -255,7 +260,6 @@ class Scene:
         self.offset_y = 0
         self._platforms_set = False
         self._platform_orientations = platform_orientations
-        self._ball_history = []
 
     def set_platforms(self, platforms):
         self._platforms_set = True
@@ -264,7 +268,7 @@ class Scene:
         }
         self.platforms = platforms
 
-    def update(self):
+    def update(self, change_colors=False):
         self.frame_count += 1
 
         # Add platform in advance if it's a bounce frame
@@ -273,7 +277,7 @@ class Scene:
             future_x, future_y = self.ball.predict_position(1)
 
             # Platform - oriented vertical
-            PWIDTH = self.ball.width // 3
+            PWIDTH = self.ball.width // 4
             PHEIGHT = self.ball.height
             choice = self._platform_orientations[self.frame_count]
             if choice:
@@ -305,6 +309,9 @@ class Scene:
         if not self._platforms_set:
             return
 
+        if change_colors and hit_platform:
+            hit_platform.color = random.choice(list(ImageColor.colormap.keys()))
+
         if not hit_platform and self.frame_count in self._platform_expectations:
             raise BadSimulaiton(
                 f"Bounce should have happened on {self.frame_count} but did not"
@@ -322,25 +329,27 @@ class Scene:
         return image
 
     def adjust_camera(self):
-        edge_x = self.screen_width * 0.4
-        edge_y = self.screen_height * 0.4
-        if self.ball.x_coord - self.offset_x < edge_x:
-            self.offset_x = self.ball.x_coord - edge_x
-        elif self.ball.x_coord - self.offset_x > self.screen_width - edge_x:
-            self.offset_x = self.ball.x_coord - (self.screen_width - edge_x)
-        if self.ball.y_coord - self.offset_y < edge_y:
-            self.offset_y = self.ball.y_coord - edge_y
-        elif self.ball.y_coord - self.offset_y > self.screen_height - edge_y:
-            self.offset_y = self.ball.y_coord - (self.screen_height - edge_y)
+        edge_x = self.screen_width * 0.5
+        edge_y = self.screen_height * 0.5
 
-    def draw_ball_history(self, image):
-        # Create an ImageDraw object
-        draw = ImageDraw.Draw(image)
+        # Desired offsets based on ball's position
+        desired_offset_x = (
+            self.ball.x_coord - edge_x
+            if self.ball.x_speed < 0
+            else self.ball.x_coord - (self.screen_width - edge_x)
+        )
+        desired_offset_y = (
+            self.ball.y_coord - edge_y
+            if self.ball.y_speed < 0
+            else self.ball.y_coord - (self.screen_height - edge_y)
+        )
 
-        # Draw the lines connecting each point in the coordinates list
-        draw.line(self._ball_history, fill=(255, 0, 0), width=2)
+        # Smoothing factor
+        alpha = 0.05
 
-        return image
+        # Update camera offsets using linear interpolation for smoother movement
+        self.offset_x = lerp(self.offset_x, desired_offset_x, alpha)
+        self.offset_y = lerp(self.offset_y, desired_offset_y, alpha)
 
     def render_platforms_image(self):
         if not self.platforms:
@@ -367,8 +376,6 @@ class Scene:
                 ],
                 fill=platform.get_color(),
             )
-
-        self.draw_ball_history(image)
 
         return image
 
@@ -439,10 +446,18 @@ def get_valid_platform_choices(frames_where_notes_happen, boolean_choice_list):
     type=click.Path(exists=True),
     help="Path to a MIDI file.",
 )
-def main(midi):
+@click.option(
+    "--max_frames",
+    default=None,
+    type=int,
+    help="Max number of frames to generate",
+)
+def main(midi, max_frames):
     frames_where_notes_happen = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
-    NUM_FRAMES = max(frames_where_notes_happen)
-    frames_where_notes_happen = {i for i in frames_where_notes_happen if i <= NUM_FRAMES}
+    NUM_FRAMES = max(frames_where_notes_happen) if max_frames is None else max_frames
+    frames_where_notes_happen = {
+        i for i in frames_where_notes_happen if i <= NUM_FRAMES
+    }
     click.echo(f"{midi} requires {NUM_FRAMES} frames")
 
     click.echo(
@@ -459,8 +474,6 @@ def main(midi):
     for _ in range(NUM_FRAMES):
         scene.update()
 
-    # scene.render_platforms_image().show()
-
     click.echo(f"\nRunning the simluation again to generate the video")
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
@@ -471,7 +484,7 @@ def main(midi):
     writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
     for curr in range(NUM_FRAMES):
         try:
-            scene.update()
+            scene.update(change_colors=True)
         except BadSimulaiton as err:
             click.echo(f"BAD {scene.frame_count} :: {err}")
         image = scene.render()
@@ -479,7 +492,7 @@ def main(midi):
         progress = (scene.frame_count / NUM_FRAMES) * 100
         click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
 
-    click.echo(f"Generate the video")
+    click.echo(f"\nGenerate the video")
     finalize_video_with_music(
         writer,
         VIDEO_FILE,
