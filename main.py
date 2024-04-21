@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageColor
+from PIL import Image, ImageDraw
 import click
 import imageio
 import numpy as np
@@ -11,22 +11,26 @@ from src.midi_stuff import (
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir
 
-BG_COLOR = "#494a73"
-PADDLE_COLOR = "#110c1d"
-BALL_COLOR = "#e9e9fc"
-HIT_SHRINK = 0.2
-HIT_ANIMATION_LENGTH = 5
+BG_COLOR = "#f1f7ed"
+PADDLE_COLOR = "#243e36"
+BALL_COLOR = "#c2a83e"
+HIT_SHRINK = 0.3
+HIT_ANIMATION_LENGTH = 10
 
-SCREEN_WIDTH = 1088
-SCREEN_HEIGHT = 1920
+SCREEN_WIDTH = 1088 // 2
+SCREEN_HEIGHT = 1920 // 2
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
-BALL_SIZE = 60
+
+BALL_SIZE = 100
+PLATFORM_HEIGHT = 100
+PLATFORM_WIDTH = 25
+
 BALL_SPEED = 15
 MIDI_FILE = "wii-music.mid"
 FPS = 60
-FRAME_BUFFER = 0
+FRAME_BUFFER = 15
 
 
 class BadSimulaiton(Exception):
@@ -162,7 +166,7 @@ class Ball(Thing):
             return faded_color
         return self.original_color
 
-    def predict_position(self, frames):
+    def predict_position(self, frames=1):
         future_x = self.x_coord + self.x_speed * frames
         future_y = self.y_coord + self.y_speed * frames
         return future_x, future_y
@@ -268,58 +272,57 @@ class Scene:
         }
         self.platforms = platforms
 
-    def update(self, change_colors=False):
+    def update(self):
         self.frame_count += 1
 
-        # Add platform in advance if it's a bounce frame
+        # When the platforms are not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
-            # Get the ball's next frame position
-            future_x, future_y = self.ball.predict_position(1)
+            future_x, future_y = self.ball.predict_position()
 
-            # Platform - oriented vertical
-            PWIDTH = self.ball.width // 4
-            PHEIGHT = self.ball.height
-            choice = self._platform_orientations[self.frame_count]
-            if choice:
-                # Platform - oriented horizontal
-                PWIDTH, PHEIGHT = PHEIGHT, PWIDTH
+            platform_orientation = self._platform_orientations.get(
+                self.frame_count,
+                False,
+            )
+            # Horizontal orientation
+            if platform_orientation:
+                pwidth, pheight = PLATFORM_HEIGHT, PLATFORM_WIDTH
+                new_platform_x = future_x - pwidth // 2
+                new_platform_y = (
+                    future_y - pheight // 2
+                    if self.ball.y_speed < 0
+                    else future_y + pheight // 2
+                )
+            # Vertical orientation
+            else:
+                pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
+                new_platform_x = (
+                    future_x - pheight // 2
+                    if self.ball.x_speed < 0
+                    else future_x + pheight // 2
+                )
+                new_platform_y = future_y - pwidth // 2
 
-            # Adjust placement to ensure collision
-            if self.ball.x_speed > 0:
-                new_platform_x = future_x + PHEIGHT
-            else:
-                new_platform_x = future_x - PHEIGHT
-            if self.ball.y_speed > 0:
-                new_platform_y = future_y + PWIDTH
-            else:
-                new_platform_y = future_y - PWIDTH
-            # Create and add the new platform
             new_platform = Platform(
-                new_platform_x,
-                new_platform_y,
-                PWIDTH,
-                PHEIGHT,
-                PADDLE_COLOR,
+                new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR
             )
             self.platforms.append(new_platform)
 
+        # Move ball and check for collisions
         hit_platform = self.ball.move(self.platforms, self.frame_count)
         self.adjust_camera()
 
-        if not self._platforms_set:
-            return
-
-        if change_colors and hit_platform:
-            hit_platform.color = random.choice(list(ImageColor.colormap.keys()))
-
-        if not hit_platform and self.frame_count in self._platform_expectations:
-            raise BadSimulaiton(
-                f"Bounce should have happened on {self.frame_count} but did not"
-            )
-        if hit_platform and self.frame_count != hit_platform.expected_bounce_frame():
-            raise BadSimulaiton(
-                f"A platform was hit on the wrong frame {self.frame_count}"
-            )
+        if self._platforms_set:
+            if not hit_platform and self.frame_count in self._platform_expectations:
+                raise BadSimulaiton(
+                    f"Bounce should have happened on {self.frame_count} but did not"
+                )
+            if (
+                hit_platform
+                and self.frame_count != hit_platform.expected_bounce_frame()
+            ):
+                raise BadSimulaiton(
+                    f"A platform was hit on the wrong frame {self.frame_count}"
+                )
 
     def render(self) -> Image:
         image = Image.new("RGB", (self.screen_width, self.screen_height), BG_COLOR)
@@ -345,7 +348,7 @@ class Scene:
         )
 
         # Smoothing factor
-        alpha = 0.05
+        alpha = 0.1
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, alpha)
@@ -355,24 +358,24 @@ class Scene:
         if not self.platforms:
             return None
 
-        # Determine the size of the image needed
-        max_x = max((p.x_coord + p.width) for p in self.platforms)
-        max_y = max((p.y_coord + p.height) for p in self.platforms)
+        min_x = min(p.x_coord for p in self.platforms)
+        max_x = max(p.x_coord + p.width for p in self.platforms)
+        min_y = min(p.y_coord for p in self.platforms)
+        max_y = max(p.y_coord + p.height for p in self.platforms)
 
-        # Create an image large enough to hold all platforms
-        image = Image.new("RGB", (int(max_x), int(max_y)), BG_COLOR)
+        img_width = max_x - min_x
+        img_height = max_y - min_y
+
+        image = Image.new("RGB", (img_width, img_height), BG_COLOR)
         draw = ImageDraw.Draw(image)
 
-        self.ball.render(image)
-
-        # Draw each platform
         for platform in self.platforms:
             draw.rectangle(
                 [
-                    platform.x_coord,
-                    platform.y_coord,
-                    platform.x_coord + platform.width,
-                    platform.y_coord + platform.height,
+                    platform.x_coord - min_x,
+                    platform.y_coord - min_y,
+                    platform.x_coord + platform.width - min_x,
+                    platform.y_coord + platform.height - min_y,
                 ],
                 fill=platform.get_color(),
             )
@@ -464,6 +467,9 @@ def main(midi, max_frames):
         f"Searching for valid placement for {len(frames_where_notes_happen)} platforms..."
     )
     boolean_choice_list = get_valid_platform_choices(frames_where_notes_happen, [True])
+    if not boolean_choice_list:
+        click.echo("\nCould not figure out platforms :(")
+        exit(0)
     choices = {}
     frame_list = sorted(list(frames_where_notes_happen))
     for idx, choice in enumerate(boolean_choice_list):
@@ -477,7 +483,7 @@ def main(midi, max_frames):
     click.echo(f"\nRunning the simluation again to generate the video")
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen)
     scene.set_platforms(platforms)
 
     VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
