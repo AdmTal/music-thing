@@ -299,14 +299,6 @@ class Scene:
             )
             self.platforms.append(new_platform)
 
-        # Move the ball
-        if DEBUG_IMAGE:
-            self._ball_history.append(
-                (
-                    self.ball.x_coord,
-                    self.ball.y_coord,
-                )
-            )
         hit_platform = self.ball.move(self.platforms, self.frame_count)
         self.adjust_camera()
 
@@ -317,12 +309,6 @@ class Scene:
             raise BadSimulaiton(
                 f"Bounce should have happened on {self.frame_count} but did not"
             )
-        if DEBUG_IMAGE:
-            if (
-                hit_platform
-                and hit_platform.expected_bounce_frame() == self.frame_count
-            ):
-                hit_platform.color = "yellow"
         if hit_platform and self.frame_count != hit_platform.expected_bounce_frame():
             raise BadSimulaiton(
                 f"A platform was hit on the wrong frame {self.frame_count}"
@@ -387,25 +373,62 @@ class Scene:
         return image
 
 
-# def generate_random_platforms(frames_where_notes_happen):
-#     return {frame: random.choice([True, False]) for frame in frames_where_notes_happen}
+def choices_are_valid(frames_where_notes_happen, boolean_choice_list):
+    choices = {}
+    frame_list = sorted(list(frames_where_notes_happen))
+    for idx, choice in enumerate(boolean_choice_list):
+        choices[frame_list[idx]] = choice
+    NUM_FRAMES = max(choices.keys())
+
+    # First - Run Choices through empty Environment to place the Platforms
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices)
+    for _ in range(NUM_FRAMES):
+        scene.update()
+
+    # Then - Check if Scene is valid when platforms placed at start
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    platforms = scene.platforms
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
+    scene.set_platforms(platforms)
+    try:
+        for _ in range(NUM_FRAMES):
+            scene.update()
+    except BadSimulaiton:
+        return False
+
+    return True
 
 
-def generate_random_platforms(frames_where_notes_happen):
-    platforms = {}
-    frames_list = list(frames_where_notes_happen)
-    i = 0
-    while i < len(frames_list):
-        current_state = random.choice([True, False])
-        repeat_count = random.randint(1, 5)
-        for _ in range(repeat_count):
-            if i < len(frames_list):
-                platforms[frames_list[i]] = current_state
-                i += 1
-    return platforms
+def get_valid_platform_choices(frames_where_notes_happen, boolean_choice_list):
+    expected = len(frames_where_notes_happen)
+    actual = len(boolean_choice_list)
+    progress = int((actual / expected) * 100)
+    click.echo(f"\rProgress: {progress}%\t\t", nl=False)
+    if len(boolean_choice_list) == len(frames_where_notes_happen):
+        if choices_are_valid(frames_where_notes_happen, boolean_choice_list):
+            return boolean_choice_list
+        else:
+            return None
 
+    # Check if the current partial string is valid
+    if not choices_are_valid(frames_where_notes_happen, boolean_choice_list):
+        # Prune the search tree here
+        return None
 
-DEBUG_IMAGE = False
+    next_choices = [True, False]
+    if random.choice([True, False]):
+        next_choices = [False, True]
+
+    for rand_choice in next_choices:
+        result = get_valid_platform_choices(
+            frames_where_notes_happen,
+            boolean_choice_list + [rand_choice],
+        )
+        if result is not None:
+            return result
+
+    return None
 
 
 @click.command()
@@ -418,51 +441,31 @@ DEBUG_IMAGE = False
 )
 def main(midi):
     frames_where_notes_happen = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
-    # NUM_FRAMES = max(frames_where_notes_happen)
-    NUM_FRAMES = 500
+    NUM_FRAMES = max(frames_where_notes_happen)
+    frames_where_notes_happen = {i for i in frames_where_notes_happen if i <= NUM_FRAMES}
     click.echo(f"{midi} requires {NUM_FRAMES} frames")
 
-    click.echo(f"Choose random platform orientations...")
-    choices = generate_random_platforms(frames_where_notes_happen)
-    click.echo(f"Simulate platform orientations until a good one is found...")
-    valid = False
-    simulation_num = 0
-    while not valid:
-        simulation_num += 1
-        ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-        scene = Scene(
-            SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices
-        )
-        for _ in range(NUM_FRAMES):
-            scene.update()
+    click.echo(
+        f"Searching for valid placement for {len(frames_where_notes_happen)} platforms..."
+    )
+    boolean_choice_list = get_valid_platform_choices(frames_where_notes_happen, [True])
+    choices = {}
+    frame_list = sorted(list(frames_where_notes_happen))
+    for idx, choice in enumerate(boolean_choice_list):
+        choices[frame_list[idx]] = choice
+    NUM_FRAMES = max(choices.keys())
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices)
+    for _ in range(NUM_FRAMES):
+        scene.update()
 
-        # Check Valid
-        ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-        platforms = scene.platforms
-        scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
-        scene.set_platforms(platforms)
-        try:
-            for _ in range(NUM_FRAMES):
-                scene.update()
-        except BadSimulaiton as err:
-            if DEBUG_IMAGE:
-                scene.render_platforms_image().show()
-                input("\nContinue when ready >")
-            click.echo(
-                f"\rSimulation {simulation_num} Failed :: {err}{' ' * 10}", nl=False
-            )
-            choices = generate_random_platforms(frames_where_notes_happen)
-            continue
+    # scene.render_platforms_image().show()
 
-        valid = True
-
-    click.echo(f"\nRun the simulation again - with the platforms already in place")
+    click.echo(f"\nRunning the simluation again to generate the video")
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
     scene.set_platforms(platforms)
-
-    # scene.render_platforms_image().show()
 
     VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
