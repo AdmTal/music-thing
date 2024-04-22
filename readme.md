@@ -10,9 +10,15 @@ I don't know why I'm so obsessed with replicating these videos right now.
 
 I'll prob give this a few more hours over the next couple of weeks and then move on to something else.
 
-If anyone already knows of an open source repo that makes these videos already, please let me know.
-
 You can run this with any MIDI file
+
+~~If anyone already knows of an open source repo that makes these videos already, please let me know.~~
+
+Update - I found the repo!  https://github.com/quasar098/midi-playground
+
+It's incredible - go look at that instead
+
+
 
 # How to Run
 
