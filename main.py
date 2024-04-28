@@ -498,7 +498,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
         return None
 
     next_choices = [True, False]
-    if random.choice([True, False, False]):
+    if random.choice([True, False]):
         next_choices = [False, True]
 
     for rand_choice in next_choices:
