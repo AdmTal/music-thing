@@ -12,7 +12,7 @@ from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir
 
 BG_COLOR = "#d6d1cd"
-PADDLE_COLOR = "white"
+PADDLE_COLOR = "black"
 BALL_COLOR = "#e0194f"
 WALL_COLOR = "#3d3f41"
 HIT_ANIMATION_LENGTH = 30
@@ -526,7 +526,13 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
     type=int,
     help="Max number of frames to generate",
 )
-def main(midi, max_frames):
+@click.option(
+    "--new_instrument",
+    default=None,
+    type=int,
+    help="General Midi program number for desired instrument https://en.wikipedia.org/wiki/General_MIDI",
+)
+def main(midi, max_frames, new_instrument):
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
     num_frames = max(note_frames) if max_frames is None else max_frames
     note_frames = {i for i in note_frames if i <= num_frames}
@@ -595,6 +601,7 @@ def main(midi, max_frames):
         SOUND_FONT_FILE_BETTER,
         scene.frame_count,
         FRAME_BUFFER,
+        new_instrument,
     )
 
 

@@ -6,7 +6,7 @@ import click
 from moviepy.editor import VideoFileClip, AudioFileClip
 from pydub import AudioSegment
 
-from src.midi_stuff import convert_midi_to_wav
+from src.midi_stuff import convert_midi_to_wav, change_instrument
 from src.cache_stuff import get_cache_dir, cleanup_cache_dir
 
 
@@ -19,6 +19,7 @@ def finalize_video_with_music(
     soundfont_file,
     frames_written,
     frame_offset,
+    new_instrument=None,
 ):
     # Ensure the writer is closed
     writer.close()
@@ -27,6 +28,13 @@ def finalize_video_with_music(
     temp_music_file = os.path.join(get_cache_dir(), "temp_music.wav")
     open(temp_music_file, "ab").close()
     click.echo("Converting midi to wave...")
+
+    if new_instrument:
+        path, _ = midi_file_path.split(".mid")
+        new_mid_path = f"{path}_alter.mid"
+        change_instrument(midi_file_path, new_mid_path, new_instrument=new_instrument)
+        midi_file_path = new_mid_path
+
     convert_midi_to_wav(
         midi_file_path,
         temp_music_file,
