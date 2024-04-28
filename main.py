@@ -11,25 +11,24 @@ from src.midi_stuff import (
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir
 
-BG_COLOR = "#2AC9F9"
-PADDLE_COLOR = "#243e36"
-BALL_COLOR = "#BF4BF8"
-HIT_SHRINK = 0.3
+BG_COLOR = "#d6d1cd"
+PADDLE_COLOR = "#3d3f41"
+BALL_COLOR = "#e0194f"
+WALL_COLOR = "#3d3f41"
 HIT_ANIMATION_LENGTH = 30
 
-CUTTER = 2
 
-SCREEN_WIDTH = 1088 // CUTTER
-SCREEN_HEIGHT = 1920 // CUTTER
+SCREEN_WIDTH = 1088
+SCREEN_HEIGHT = 1920
 
-BALL_START_X = SCREEN_WIDTH // CUTTER
-BALL_START_Y = SCREEN_HEIGHT // CUTTER
+BALL_START_X = SCREEN_WIDTH // 2
+BALL_START_Y = SCREEN_HEIGHT // 2
 
-BALL_SIZE = 100 // CUTTER
-PLATFORM_HEIGHT = 200 // CUTTER
-PLATFORM_WIDTH = 50 // CUTTER
+BALL_SIZE = 39
+PLATFORM_HEIGHT = 40
+PLATFORM_WIDTH = 20
 
-BALL_SPEED = 30
+BALL_SPEED = 15
 MIDI_FILE = "wii-music.mid"
 FPS = 60
 FRAME_BUFFER = 15
@@ -51,11 +50,17 @@ class Thing:
         self.width = width
         self.height = height
         self.color = color
+        self.visible = True
 
     def get_color(self):
         return self.color
 
+    def hide(self):
+        self.visible = False
+
     def render(self, image, offset_x, offset_y):
+        if not self.visible:
+            return
         draw = ImageDraw.Draw(image)
         draw.rectangle(
             [
@@ -66,6 +71,10 @@ class Thing:
             ],
             fill=self.get_color(),
         )
+
+
+class Wall(Thing):
+    pass
 
 
 class Platform(Thing):
@@ -107,7 +116,7 @@ class Ball(Thing):
             [left, top, right, bottom],
             outline=self.get_color(),
             fill=None,
-            width=10 // CUTTER,
+            width=10,
         )
 
         # Draw and blur the "explosion" effect
@@ -157,11 +166,25 @@ class Ball(Thing):
         future_y = self.y_coord + self.y_speed * frames
         return future_x, future_y
 
-    def move(self, platforms, frame):
+    def move(self, platforms, walls, frame):
         # Calculate potential next position of the ball
         next_x = self.x_coord
         next_y = self.y_coord
         hit_platform = None
+
+        for wall in walls:
+            buffer = 0
+            ball_left = next_x - buffer
+            ball_right = next_x + self.width + buffer
+            ball_top = next_y - buffer
+            ball_bottom = next_y + self.height + buffer
+            if (
+                ball_right >= wall.x_coord
+                and ball_left <= wall.x_coord + wall.width
+                and ball_bottom >= wall.y_coord
+                and ball_top <= wall.y_coord + wall.height
+            ):
+                wall.hide()
 
         # Check each platform for a possible collision
         for platform in platforms:
@@ -250,6 +273,8 @@ class Scene:
         self.offset_y = 0
         self._platforms_set = False
         self._platform_orientations = platform_orientations
+        self.ball_history = []
+        self.walls = []
 
     def set_platforms(self, platforms):
         self._platforms_set = True
@@ -257,6 +282,9 @@ class Scene:
             platform.expected_bounce_frame(): platform for platform in platforms
         }
         self.platforms = platforms
+
+    def set_walls(self, walls):
+        self.walls = walls
 
     def update(self):
         self.frame_count += 1
@@ -294,7 +322,10 @@ class Scene:
             self.platforms.append(new_platform)
 
         # Move ball and check for collisions
-        hit_platform = self.ball.move(self.platforms, self.frame_count)
+        hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count)
+
+        self.ball_history.append((self.ball.x_coord, self.ball.y_coord))
+
         self.adjust_camera()
 
         if self._platforms_set:
@@ -313,6 +344,8 @@ class Scene:
     def render(self) -> Image:
         image = Image.new("RGBA", (self.screen_width, self.screen_height), BG_COLOR)
         self.ball.render(image, self.offset_x, self.offset_y)
+        for wall in self.walls:
+            wall.render(image, self.offset_x, self.offset_y)
         for platform in self.platforms:
             platform.render(image, self.offset_x, self.offset_y)
         return image
@@ -340,6 +373,45 @@ class Scene:
         self.offset_x = lerp(self.offset_x, desired_offset_x, alpha)
         self.offset_y = lerp(self.offset_y, desired_offset_y, alpha)
 
+    @staticmethod
+    def create_squares(list_of_x_coords, list_of_y_coords):
+        list_of_x_coords = sorted(list_of_x_coords)
+        list_of_y_coords = sorted(list_of_y_coords)
+        return [
+            [x, y, x2 - x, y2 - y]
+            for x, x2 in zip(list_of_x_coords[:-1], list_of_x_coords[1:])
+            for y, y2 in zip(list_of_y_coords[:-1], list_of_y_coords[1:])
+            if x2 - x and y2 - y
+        ]
+
+    def place_walls(self):
+        list_of_x_coords = []
+        list_of_y_coords = []
+        for platform in self.platforms:
+            list_of_x_coords += [platform.x_coord, platform.x_coord + platform.width]
+            list_of_y_coords += [platform.y_coord, platform.y_coord + platform.height]
+
+        walls = self.create_squares(list_of_x_coords, list_of_y_coords)
+        for x, y, W, H in walls:
+            self.walls.append(Wall(x, y, W, H, WALL_COLOR))
+        # Find the minimum and maximum extents of existing walls
+        minX = min(w[0] for w in walls)
+        maxX = max(w[0] + w[2] for w in walls)
+        minY = min(w[1] for w in walls)
+        maxY = max(w[1] + w[3] for w in walls)
+
+        WS = SCREEN_WIDTH * 2
+        HS = SCREEN_HEIGHT * 2
+
+        edge_walls = [
+            Wall(minX - WS, minY - HS, WS, HS + (maxY - minY) + HS, WALL_COLOR),
+            Wall(maxX, minY - HS, WS, HS + (maxY - minY) + HS, WALL_COLOR),
+            Wall(minX - WS, minY - HS, 2 * WS + (maxX - minX), HS, WALL_COLOR),
+            Wall(minX - WS, maxY, 2 * WS + (maxX - minX), HS, WALL_COLOR),
+        ]
+        for ew in edge_walls:
+            self.walls.append(ew)
+
     def render_platforms_image(self):
         if not self.platforms:
             return None
@@ -354,6 +426,18 @@ class Scene:
 
         image = Image.new("RGB", (img_width, img_height), BG_COLOR)
         draw = ImageDraw.Draw(image)
+
+        for wall in self.walls:
+            draw.rectangle(
+                [
+                    wall.x_coord - min_x,
+                    wall.y_coord - min_y,
+                    wall.x_coord + wall.width - min_x,
+                    wall.y_coord + wall.height - min_y,
+                ],
+                fill=wall.get_color(),
+                # outline="red",
+            )
 
         for platform in self.platforms:
             draw.rectangle(
@@ -461,16 +545,31 @@ def main(midi, max_frames):
     for idx, choice in enumerate(boolean_choice_list):
         choices[frame_list[idx]] = choice
     NUM_FRAMES = max(choices.keys())
+
+    click.echo(f"\nRunning simulation to generate Platforms...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices)
     for _ in range(NUM_FRAMES):
         scene.update()
 
-    click.echo(f"\nRunning the simluation again to generate the video")
+    scene.place_walls()
+    walls = scene.walls
+
+    click.echo(f"\nRunning the simulation again to carve the walls...")
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen)
     scene.set_platforms(platforms)
+    scene.set_walls(walls)
+    for curr in range(NUM_FRAMES):
+        scene.update()
+    carved_walls = scene.walls
+
+    click.echo(f"\nRunning the simulation again to make the video...")
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen)
+    scene.set_platforms(platforms)
+    scene.set_walls(carved_walls)
 
     VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
@@ -483,6 +582,8 @@ def main(midi, max_frames):
         writer.append_data(np.array(image))
         progress = (scene.frame_count / NUM_FRAMES) * 100
         click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
+
+    scene.place_walls()
 
     click.echo(f"\nGenerate the video")
     finalize_video_with_music(
