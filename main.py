@@ -5,7 +5,7 @@ import numpy as np
 import random
 
 from src.midi_stuff import (
-    get_note_frames,
+    get_frames_where_notes_happen,
     SOUND_FONT_FILE_BETTER,
 )
 from src.video_stuff import finalize_video_with_music
@@ -498,7 +498,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
         return None
 
     next_choices = [True, False]
-    if random.choice([True, False]):
+    if random.choice([True, False, False]):
         next_choices = [False, True]
 
     for rand_choice in next_choices:
@@ -527,7 +527,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
     help="Max number of frames to generate",
 )
 def main(midi, max_frames):
-    note_frames = get_note_frames(midi, FPS, FRAME_BUFFER)
+    note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
     num_frames = max(note_frames) if max_frames is None else max_frames
     note_frames = {i for i in note_frames if i <= num_frames}
     click.echo(f"{midi} requires {num_frames} frames")
