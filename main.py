@@ -571,8 +571,8 @@ def main(midi, max_frames):
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls)
 
-    VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
-    writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
+    video_file = f"{get_cache_dir()}/scene.mp4"
+    writer = imageio.get_writer(video_file, fps=FPS)
     for curr in range(num_frames):
         try:
             scene.update()
@@ -588,7 +588,7 @@ def main(midi, max_frames):
     click.echo(f"\nGenerating the video...")
     finalize_video_with_music(
         writer,
-        VIDEO_FILE,
+        video_file,
         "final",
         midi,
         FPS,
