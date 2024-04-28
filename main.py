@@ -5,14 +5,14 @@ import numpy as np
 import random
 
 from src.midi_stuff import (
-    get_frames_where_notes_happen,
+    get_note_frames,
     SOUND_FONT_FILE_BETTER,
 )
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir
 
 BG_COLOR = "#d6d1cd"
-PADDLE_COLOR = "#3d3f41"
+PADDLE_COLOR = "white"
 BALL_COLOR = "#e0194f"
 WALL_COLOR = "#3d3f41"
 HIT_ANIMATION_LENGTH = 30
@@ -412,7 +412,7 @@ class Scene:
         for ew in edge_walls:
             self.walls.append(ew)
 
-    def render_platforms_image(self):
+    def render_full_image(self):
         if not self.platforms:
             return None
 
@@ -428,6 +428,8 @@ class Scene:
         draw = ImageDraw.Draw(image)
 
         for wall in self.walls:
+            if not wall.visible:
+                continue
             draw.rectangle(
                 [
                     wall.x_coord - min_x,
@@ -436,7 +438,6 @@ class Scene:
                     wall.y_coord + wall.height - min_y,
                 ],
                 fill=wall.get_color(),
-                # outline="red",
             )
 
         for platform in self.platforms:
@@ -453,17 +454,17 @@ class Scene:
         return image
 
 
-def choices_are_valid(frames_where_notes_happen, boolean_choice_list):
+def choices_are_valid(note_frames, boolean_choice_list):
     choices = {}
-    frame_list = sorted(list(frames_where_notes_happen))
+    frame_list = sorted(list(note_frames))
     for idx, choice in enumerate(boolean_choice_list):
         choices[frame_list[idx]] = choice
-    NUM_FRAMES = max(choices.keys())
+    num_frames = max(choices.keys())
 
     # First - Run Choices through empty Environment to place the Platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices)
-    for _ in range(NUM_FRAMES):
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
+    for _ in range(num_frames):
         scene.update()
 
     # Then - Check if Scene is valid when platforms placed at start
@@ -472,7 +473,7 @@ def choices_are_valid(frames_where_notes_happen, boolean_choice_list):
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
     scene.set_platforms(platforms)
     try:
-        for _ in range(NUM_FRAMES):
+        for _ in range(num_frames):
             scene.update()
     except BadSimulaiton:
         return False
@@ -480,19 +481,19 @@ def choices_are_valid(frames_where_notes_happen, boolean_choice_list):
     return True
 
 
-def get_valid_platform_choices(frames_where_notes_happen, boolean_choice_list):
-    expected = len(frames_where_notes_happen)
+def get_valid_platform_choices(note_frames, boolean_choice_list):
+    expected = len(note_frames)
     actual = len(boolean_choice_list)
     progress = int((actual / expected) * 100)
     click.echo(f"\rProgress: {progress}%\t\t", nl=False)
-    if len(boolean_choice_list) == len(frames_where_notes_happen):
-        if choices_are_valid(frames_where_notes_happen, boolean_choice_list):
+    if len(boolean_choice_list) == len(note_frames):
+        if choices_are_valid(note_frames, boolean_choice_list):
             return boolean_choice_list
         else:
             return None
 
     # Check if the current partial string is valid
-    if not choices_are_valid(frames_where_notes_happen, boolean_choice_list):
+    if not choices_are_valid(note_frames, boolean_choice_list):
         # Prune the search tree here
         return None
 
@@ -502,7 +503,7 @@ def get_valid_platform_choices(frames_where_notes_happen, boolean_choice_list):
 
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
-            frames_where_notes_happen,
+            note_frames,
             boolean_choice_list + [rand_choice],
         )
         if result is not None:
@@ -526,30 +527,29 @@ def get_valid_platform_choices(frames_where_notes_happen, boolean_choice_list):
     help="Max number of frames to generate",
 )
 def main(midi, max_frames):
-    frames_where_notes_happen = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
-    NUM_FRAMES = max(frames_where_notes_happen) if max_frames is None else max_frames
-    frames_where_notes_happen = {
-        i for i in frames_where_notes_happen if i <= NUM_FRAMES
-    }
-    click.echo(f"{midi} requires {NUM_FRAMES} frames")
+    note_frames = get_note_frames(midi, FPS, FRAME_BUFFER)
+    num_frames = max(note_frames) if max_frames is None else max_frames
+    note_frames = {i for i in note_frames if i <= num_frames}
+    click.echo(f"{midi} requires {num_frames} frames")
 
-    click.echo(
-        f"Searching for valid placement for {len(frames_where_notes_happen)} platforms..."
-    )
-    boolean_choice_list = get_valid_platform_choices(frames_where_notes_happen, [True])
+    click.echo(f"Searching for valid placement for {len(note_frames)} platforms...")
+    boolean_choice_list = get_valid_platform_choices(note_frames, [True])
     if not boolean_choice_list:
         click.echo("\nCould not figure out platforms :(")
+        click.echo("\nTry changing ball and platform size, and speed")
         exit(0)
+
+    # Convert `boolean_choice_list` to `choices`
     choices = {}
-    frame_list = sorted(list(frames_where_notes_happen))
+    frame_list = sorted(list(note_frames))
     for idx, choice in enumerate(boolean_choice_list):
         choices[frame_list[idx]] = choice
-    NUM_FRAMES = max(choices.keys())
+    num_frames = max(choices.keys())
 
     click.echo(f"\nRunning simulation to generate Platforms...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen, choices)
-    for _ in range(NUM_FRAMES):
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
+    for _ in range(num_frames):
         scene.update()
 
     scene.place_walls()
@@ -558,34 +558,34 @@ def main(midi, max_frames):
     click.echo(f"\nRunning the simulation again to carve the walls...")
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen)
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
-    for curr in range(NUM_FRAMES):
+    for curr in range(num_frames):
         scene.update()
     carved_walls = scene.walls
 
     click.echo(f"\nRunning the simulation again to make the video...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
-    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, frames_where_notes_happen)
+    scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls)
 
     VIDEO_FILE = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(VIDEO_FILE, fps=FPS)
-    for curr in range(NUM_FRAMES):
+    for curr in range(num_frames):
         try:
             scene.update()
         except BadSimulaiton as err:
             click.echo(f"BAD {scene.frame_count} :: {err}")
         image = scene.render()
         writer.append_data(np.array(image))
-        progress = (scene.frame_count / NUM_FRAMES) * 100
+        progress = (scene.frame_count / num_frames) * 100
         click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
 
     scene.place_walls()
 
-    click.echo(f"\nGenerate the video")
+    click.echo(f"\nGenerating the video...")
     finalize_video_with_music(
         writer,
         VIDEO_FILE,

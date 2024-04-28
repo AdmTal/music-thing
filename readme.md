@@ -40,6 +40,7 @@ python main.py --help
 Usage: main.py [OPTIONS]
 
 Options:
-  --midi PATH  Path to a MIDI file.  [required]
-  --help       Show this message and exit.
+  --midi PATH           Path to a MIDI file.  [required]
+  --max_frames INTEGER  Max number of frames to generate
+  --help                Show this message and exit.
 ```
