@@ -7,3 +7,4 @@ pretty-midi==0.2.10
 moviepy==1.0.3
 pydub==0.25.1
 midi2audio==0.1.1
+pygame==2.5.2
