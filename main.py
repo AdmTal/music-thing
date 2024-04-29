@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageColor
 import click
 import imageio
 import numpy as np
@@ -12,10 +12,11 @@ from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir
 
 BG_COLOR = "#d6d1cd"
-PADDLE_COLOR = "black"
 BALL_COLOR = "#e0194f"
 WALL_COLOR = "#3d3f41"
-HIT_ANIMATION_LENGTH = 30
+PADDLE_COLOR = WALL_COLOR
+HIT_SHRINK = 0.4
+HIT_ANIMATION_LENGTH = 20
 
 
 SCREEN_WIDTH = 1088
@@ -24,11 +25,11 @@ SCREEN_HEIGHT = 1920
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
-BALL_SIZE = 39
-PLATFORM_HEIGHT = 40
-PLATFORM_WIDTH = 20
+BALL_SIZE = 50
+PLATFORM_HEIGHT = 50
+PLATFORM_WIDTH = 50
 
-BALL_SPEED = 15
+BALL_SPEED = 6
 MIDI_FILE = "wii-music.mid"
 FPS = 60
 FRAME_BUFFER = 15
@@ -41,6 +42,50 @@ class BadSimulaiton(Exception):
 def lerp(start, end, alpha):
     """Linearly interpolates between start and end."""
     return start + (end - start) * alpha
+
+
+def animate_throb(n, peak=HIT_ANIMATION_LENGTH // 2, width=HIT_ANIMATION_LENGTH):
+    # Calculate the cycle midpoint based on the specified width
+    midpoint = width // 2
+    # Calculate the current position in the cycle using modulo operation
+    position_in_cycle = abs((n - 1) % width - midpoint)
+    # Generate the triangular value based on distance from midpoint
+    return peak - position_in_cycle
+
+
+def brighten_color(hex_color, increase=100):
+    # Convert hex to RGB
+    r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
+
+    # Brighten the color
+    r = min(255, r + increase)
+    g = min(255, g + increase)
+    b = min(255, b + increase)
+
+    # Convert back to hex
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def fade_color(start_color_hex, dest_color_hex, num_frames, curr_frame_number):
+    # Extract RGB components from hexadecimal color values
+    r_start, g_start, b_start = (
+        int(start_color_hex[1:3], 16),
+        int(start_color_hex[3:5], 16),
+        int(start_color_hex[5:7], 16),
+    )
+    r_end, g_end, b_end = (
+        int(dest_color_hex[1:3], 16),
+        int(dest_color_hex[3:5], 16),
+        int(dest_color_hex[5:7], 16),
+    )
+
+    # Calculate the current color's RGB values using linear interpolation
+    r_curr = int(r_start + (r_end - r_start) * (curr_frame_number / num_frames))
+    g_curr = int(g_start + (g_end - g_start) * (curr_frame_number / num_frames))
+    b_curr = int(b_start + (b_end - b_start) * (curr_frame_number / num_frames))
+
+    # Return the current color in hexadecimal format
+    return f"#{r_curr:02x}{g_curr:02x}{b_curr:02x}"
 
 
 class Thing:
@@ -72,6 +117,16 @@ class Thing:
             fill=self.get_color(),
         )
 
+    def in_frame(self, visible_bounds):
+        """Check if the object is within the visible bounds."""
+        visible_left, visible_right, visible_top, visible_bottom = visible_bounds
+        return (
+            self.x_coord + self.width >= visible_left
+            and self.x_coord <= visible_right
+            and self.y_coord + self.height >= visible_top
+            and self.y_coord <= visible_bottom
+        )
+
 
 class Wall(Thing):
     pass
@@ -96,7 +151,8 @@ class Ball(Thing):
         super().__init__(x_coord, y_coord, size, size, color)
         self.x_speed = speed
         self.y_speed = speed
-        self.explosion_fade_frames_remaining = HIT_ANIMATION_LENGTH
+        self.color_fade_frames_remaining = 0
+        self.size_fade_frames_remaining = 0
         self.original_color = color
         self.original_size = size
         self.current_size = size
@@ -104,61 +160,48 @@ class Ball(Thing):
     def hit(self):
         self.explosion_fade_frames_remaining = HIT_ANIMATION_LENGTH
 
-    def render(self, image, offset_x=0, offset_y=0):
-        draw = ImageDraw.Draw(image)
+    def hit(self):
+        self.color_fade_frames_remaining = HIT_ANIMATION_LENGTH // 2
+        self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
 
-        # Draw the regular square
-        left = self.x_coord - offset_x
-        right = self.x_coord - offset_x + self.current_size
-        top = self.y_coord - offset_y
-        bottom = self.y_coord - offset_y + self.current_size
+    def render(self, image, offset_x, offset_y):
+        draw = ImageDraw.Draw(image)
+        # Calculate the size reduction effect
+        if self.size_fade_frames_remaining > 0:
+            factor = 1 - HIT_SHRINK * (
+                animate_throb(self.size_fade_frames_remaining) / HIT_ANIMATION_LENGTH
+            )
+            spacer_factor = 1 - factor
+            self.current_size = int(self.original_size * factor)
+            spacer = int(self.current_size * spacer_factor)
+            self.size_fade_frames_remaining -= 1
+            left = self.x_coord - offset_x + spacer
+            right = self.x_coord - offset_x + self.current_size
+            top = self.y_coord - offset_y + spacer
+            bottom = self.y_coord - offset_y + self.current_size
+        else:
+            self.current_size = self.original_size
+            left = self.x_coord - offset_x
+            right = self.x_coord - offset_x + self.current_size
+            top = self.y_coord - offset_y
+            bottom = self.y_coord - offset_y + self.current_size
         draw.rectangle(
             [left, top, right, bottom],
             outline=self.get_color(),
             fill=None,
-            width=10,
+            width=5,
         )
 
-        # Draw and blur the "explosion" effect
-        if self.explosion_fade_frames_remaining > 0:
-            expansion = int(
-                2
-                * self.original_size
-                * (1 - (self.explosion_fade_frames_remaining / HIT_ANIMATION_LENGTH))
-            )
-            explosion_size = self.original_size + expansion
-            explosion_image = Image.new("RGBA", (explosion_size, explosion_size))
-            explosion_draw = ImageDraw.Draw(explosion_image)
-
-            # Draw the explosion at the center of the new image
-            explosion_draw.rectangle(
-                [
-                    expansion // 2,
-                    expansion // 2,
-                    explosion_size - expansion // 2,
-                    explosion_size - expansion // 2,
-                ],
-                outline="#FF5BFF",
-            )
-
-            # Apply Gaussian Blur
-            radius = 2 * (
-                1 - (self.explosion_fade_frames_remaining / HIT_ANIMATION_LENGTH)
-            )  # Increase blur as it fades
-            explosion_image = explosion_image.filter(
-                ImageFilter.GaussianBlur(radius=radius)
-            )
-
-            # Paste the blurred explosion onto the original image
-            explosion_left = int(self.x_coord - offset_x - expansion // 2)
-            explosion_top = int(self.y_coord - offset_y - expansion // 2)
-            image.paste(
-                explosion_image, (explosion_left, explosion_top), explosion_image
-            )
-
-            self.explosion_fade_frames_remaining -= 1
-
     def get_color(self):
+        if self.color_fade_frames_remaining > 0:
+            faded_color = fade_color(
+                brighten_color(self.original_color),
+                self.original_color,
+                HIT_ANIMATION_LENGTH,
+                self.color_fade_frames_remaining,
+            )
+            self.color_fade_frames_remaining -= 1
+            return faded_color
         return self.original_color
 
     def predict_position(self, frames=1):
@@ -275,6 +318,7 @@ class Scene:
         self._platform_orientations = platform_orientations
         self.ball_history = []
         self.walls = []
+        self.carved = False
 
     def set_platforms(self, platforms):
         self._platforms_set = True
@@ -283,10 +327,11 @@ class Scene:
         }
         self.platforms = platforms
 
-    def set_walls(self, walls):
+    def set_walls(self, walls, carved=False):
+        self.carved = carved
         self.walls = walls
 
-    def update(self):
+    def update(self, change_colors=False):
         self.frame_count += 1
 
         # When the platforms are not set, we are creating them
@@ -322,11 +367,18 @@ class Scene:
             self.platforms.append(new_platform)
 
         # Move ball and check for collisions
-        hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count)
+        # Skipping carved walls saves time - less collision
+        if self.carved:
+            hit_platform = self.ball.move(self.platforms, [], self.frame_count)
+        else:
+            hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count)
 
         self.ball_history.append((self.ball.x_coord, self.ball.y_coord))
 
         self.adjust_camera()
+
+        if change_colors and hit_platform:
+            hit_platform.color = random.choice(list(ImageColor.colormap.keys()))
 
         if self._platforms_set:
             if not hit_platform and self.frame_count in self._platform_expectations:
@@ -342,12 +394,32 @@ class Scene:
                 )
 
     def render(self) -> Image:
-        image = Image.new("RGBA", (self.screen_width, self.screen_height), BG_COLOR)
-        self.ball.render(image, self.offset_x, self.offset_y)
-        for wall in self.walls:
-            wall.render(image, self.offset_x, self.offset_y)
-        for platform in self.platforms:
-            platform.render(image, self.offset_x, self.offset_y)
+        image = Image.new(
+            "RGBA",
+            (
+                self.screen_width,
+                self.screen_height,
+            ),
+            BG_COLOR,
+        )
+
+        # Determine the visible area based on the current offset
+        visible_bounds = (
+            self.offset_x,
+            self.offset_x + self.screen_width,
+            self.offset_y,
+            self.offset_y + self.screen_height,
+        )
+
+        # Only render the ball if it's within the visible area
+        if self.ball.in_frame(visible_bounds):
+            self.ball.render(image, self.offset_x, self.offset_y)
+
+        # Only render walls and platforms if they are within the visible area
+        for obj in self.walls + self.platforms:
+            if obj.in_frame(visible_bounds):
+                obj.render(image, self.offset_x, self.offset_y)
+
         return image
 
     def adjust_camera(self):
@@ -557,11 +629,15 @@ def main(midi, max_frames, new_instrument):
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
     for _ in range(num_frames):
         scene.update()
+        progress = (scene.frame_count / num_frames) * 100
+        click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
 
     scene.place_walls()
     walls = scene.walls
 
-    click.echo(f"\nRunning the simulation again to carve the walls...")
+    click.echo(
+        f"\nRunning the simulation again to carve the walls ({len(walls)} walls)..."
+    )
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
@@ -569,19 +645,22 @@ def main(midi, max_frames, new_instrument):
     scene.set_walls(walls)
     for curr in range(num_frames):
         scene.update()
+        progress = (scene.frame_count / num_frames) * 100
+        click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
     carved_walls = scene.walls
 
     click.echo(f"\nRunning the simulation again to make the video...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
-    scene.set_walls(carved_walls)
+    scene.set_walls(carved_walls, carved=True)
 
     video_file = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(video_file, fps=FPS)
     for curr in range(num_frames):
         try:
-            scene.update()
+            change_colors = False
+            scene.update(change_colors)
         except BadSimulaiton as err:
             click.echo(f"BAD {scene.frame_count} :: {err}")
         image = scene.render()

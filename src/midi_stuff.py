@@ -16,14 +16,28 @@ def convert_midi_to_wav(
     fs.midi_to_audio(midi_file_path, wav_file_path)
 
 
-def change_instrument(midi_file_path, output_file_path, new_instrument=0):
+def change_instrument(
+    midi_file_path,
+    output_file_path,
+    new_instrument=0,
+    new_volume=127,
+):
     # Load MIDI file
     midi_data = pretty_midi.PrettyMIDI(midi_file_path)
+
+    # MIDI volume can range from 0 (silent) to 127 (maximum)
+    volume_level = max(0, min(new_volume, 127))
 
     # Iterate over all instrument tracks
     for instrument in midi_data.instruments:
         # Change the instrument program (0 is Acoustic Grand Piano, etc.)
         instrument.program = new_instrument
+        # Create and append the volume control change at the beginning of the track
+        volume_change = pretty_midi.ControlChange(number=7, value=volume_level, time=0)
+        instrument.control_changes.append(volume_change)
+
+        sustain = pretty_midi.ControlChange(number=64, value=1, time=0)
+        instrument.control_changes.append(sustain)
 
     # Save modified MIDI file
     midi_data.write(output_file_path)
