@@ -25,11 +25,11 @@ SCREEN_HEIGHT = 1920
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
-BALL_SIZE = 50
-PLATFORM_HEIGHT = 40
-PLATFORM_WIDTH = 40
+BALL_SIZE = 35
+PLATFORM_HEIGHT = BALL_SIZE
+PLATFORM_WIDTH = BALL_SIZE // 2
 
-BALL_SPEED = 6
+BALL_SPEED = 10
 MIDI_FILE = "wii-music.mid"
 FPS = 60
 FRAME_BUFFER = 15
@@ -765,7 +765,7 @@ def main(midi, max_frames, new_instrument, show_carve):
     video_file = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(video_file, fps=FPS)
     for curr in range(num_frames):
-        change_colors = False
+        change_colors = True
         scene.update(change_colors)
         image = scene.render()
         writer.append_data(np.array(image))
