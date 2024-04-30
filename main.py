@@ -9,7 +9,7 @@ from src.midi_stuff import (
     SOUND_FONT_FILE_BETTER,
 )
 from src.video_stuff import finalize_video_with_music
-from src.cache_stuff import get_cache_dir
+from src.cache_stuff import get_cache_dir, cleanup_cache_dir
 
 BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
@@ -147,7 +147,7 @@ class Platform(Thing):
 
 
 class Ball(Thing):
-    def __init__(self, x_coord, y_coord, size, color, speed):
+    def __init__(self, x_coord, y_coord, size, color, speed,show_carve=False):
         super().__init__(x_coord, y_coord, size, size, color)
         self.x_speed = speed
         self.y_speed = speed
@@ -162,6 +162,7 @@ class Ball(Thing):
         self._carve_bottom_left_corner = None
         self._carve_bottom_right_corner = None
         self._initialize_carve_square()
+        self.show_carve = show_carve
 
     def hit(self):
         self.explosion_fade_frames_remaining = HIT_ANIMATION_LENGTH
@@ -197,6 +198,23 @@ class Ball(Thing):
             fill=None,
             width=5,
         )
+
+        if self.show_carve:
+            corners = [
+                self._carve_top_left_corner,
+                self._carve_top_right_corner,
+                self._carve_bottom_left_corner,
+                self._carve_bottom_right_corner,
+            ]
+            # Calculate the coordinates adjusted by offset
+            adjusted_corners = [(x - offset_x, y - offset_y) for x, y in corners]
+            # Find the minimum and maximum x and y from the corners
+            min_x = min(adjusted_corners, key=lambda t: t[0])[0]
+            max_x = max(adjusted_corners, key=lambda t: t[0])[0]
+            min_y = min(adjusted_corners, key=lambda t: t[1])[1]
+            max_y = max(adjusted_corners, key=lambda t: t[1])[1]
+            # Draw the rectangle using the top-left and bottom-right corners
+            draw.rectangle([(min_x, min_y), (max_x, max_y)], outline="red", width=3)
 
     def get_color(self):
         if self.color_fade_frames_remaining > 0:
@@ -290,11 +308,21 @@ class Ball(Thing):
             self._initialize_carve_square()
 
         for wall in walls:
-            buffer = 0
-            ball_left = self.x_coord - buffer
-            ball_right = self.x_coord + self.width + buffer
-            ball_top = self.y_coord - buffer
-            ball_bottom = self.y_coord + self.height + buffer
+            # Get the minimum and maximum x and y values from the carving corners
+            ball_left = min(
+                self._carve_top_left_corner[0], self._carve_bottom_left_corner[0]
+            )
+            ball_right = max(
+                self._carve_top_right_corner[0], self._carve_bottom_right_corner[0]
+            )
+            ball_top = min(
+                self._carve_top_left_corner[1], self._carve_top_right_corner[1]
+            )
+            ball_bottom = max(
+                self._carve_bottom_left_corner[1], self._carve_bottom_right_corner[1]
+            )
+
+            # Check collision with wall
             if (
                 ball_right >= wall.x_coord
                 and ball_left <= wall.x_coord + wall.width
@@ -657,7 +685,13 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
     type=int,
     help="General Midi program number for desired instrument https://en.wikipedia.org/wiki/General_MIDI",
 )
-def main(midi, max_frames, new_instrument):
+@click.option(
+    "--show_carve",
+    default=False,
+    type=bool,
+    help="Generate a Carving Video",
+)
+def main(midi, max_frames, new_instrument, show_carve):
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
     num_frames = max(note_frames) if max_frames is None else max_frames
     note_frames = {i for i in note_frames if i <= num_frames}
@@ -692,16 +726,36 @@ def main(midi, max_frames, new_instrument):
         f"\nRunning the simulation again to carve the walls ({len(walls)} walls)..."
     )
     platforms = scene.platforms
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=show_carve)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
+
+    # Make a carving video
+    video_file = f"{get_cache_dir()}/carve-scene.mp4"
+    writer = imageio.get_writer(video_file, fps=FPS)
     for curr in range(num_frames):
         scene.update()
+        image = scene.render()
+        if show_carve:
+            writer.append_data(np.array(image))
         progress = (scene.frame_count / num_frames) * 100
         click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
-    carved_walls = scene.walls
 
+    if show_carve:
+        finalize_video_with_music(
+            writer,
+            video_file,
+            "carve",
+            midi,
+            FPS,
+            SOUND_FONT_FILE_BETTER,
+            scene.frame_count,
+            FRAME_BUFFER,
+            new_instrument,
+        )
+
+    carved_walls = scene.walls
     click.echo(f"\nRunning the simulation again to make the video...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
@@ -711,11 +765,8 @@ def main(midi, max_frames, new_instrument):
     video_file = f"{get_cache_dir()}/scene.mp4"
     writer = imageio.get_writer(video_file, fps=FPS)
     for curr in range(num_frames):
-        try:
-            change_colors = False
-            scene.update(change_colors)
-        except BadSimulaiton as err:
-            click.echo(f"BAD {scene.frame_count} :: {err}")
+        change_colors = False
+        scene.update(change_colors)
         image = scene.render()
         writer.append_data(np.array(image))
         progress = (scene.frame_count / num_frames) * 100
@@ -735,6 +786,8 @@ def main(midi, max_frames, new_instrument):
         FRAME_BUFFER,
         new_instrument,
     )
+
+    cleanup_cache_dir(get_cache_dir())
 
 
 if __name__ == "__main__":

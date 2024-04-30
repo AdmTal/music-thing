@@ -60,6 +60,4 @@ def finalize_video_with_music(
 
     subprocess.run(["open", final_output_path])
 
-    cleanup_cache_dir(get_cache_dir())
-
     return final_output_path
