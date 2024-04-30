@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageFilter, ImageColor
+from PIL import Image, ImageDraw, ImageColor
 import click
 import imageio
 import numpy as np
@@ -15,8 +15,8 @@ BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
 WALL_COLOR = "#3d3f41"
 PADDLE_COLOR = WALL_COLOR
-HIT_SHRINK = 0.4
-HIT_ANIMATION_LENGTH = 20
+HIT_SHRINK = 0.3
+HIT_ANIMATION_LENGTH = 15
 
 
 SCREEN_WIDTH = 1088
@@ -26,8 +26,8 @@ BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
 BALL_SIZE = 50
-PLATFORM_HEIGHT = 50
-PLATFORM_WIDTH = 50
+PLATFORM_HEIGHT = 40
+PLATFORM_WIDTH = 40
 
 BALL_SPEED = 6
 MIDI_FILE = "wii-music.mid"
@@ -53,7 +53,7 @@ def animate_throb(n, peak=HIT_ANIMATION_LENGTH // 2, width=HIT_ANIMATION_LENGTH)
     return peak - position_in_cycle
 
 
-def brighten_color(hex_color, increase=100):
+def brighten_color(hex_color, increase=20):
     # Convert hex to RGB
     r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
 
@@ -157,6 +157,12 @@ class Ball(Thing):
         self.original_size = size
         self.current_size = size
 
+        self._carve_top_left_corner = None
+        self._carve_top_right_corner = None
+        self._carve_bottom_left_corner = None
+        self._carve_bottom_right_corner = None
+        self._initialize_carve_square()
+
     def hit(self):
         self.explosion_fade_frames_remaining = HIT_ANIMATION_LENGTH
 
@@ -214,20 +220,6 @@ class Ball(Thing):
         next_x = self.x_coord
         next_y = self.y_coord
         hit_platform = None
-
-        for wall in walls:
-            buffer = 0
-            ball_left = next_x - buffer
-            ball_right = next_x + self.width + buffer
-            ball_top = next_y - buffer
-            ball_bottom = next_y + self.height + buffer
-            if (
-                ball_right >= wall.x_coord
-                and ball_left <= wall.x_coord + wall.width
-                and ball_bottom >= wall.y_coord
-                and ball_top <= wall.y_coord + wall.height
-            ):
-                wall.hide()
 
         # Check each platform for a possible collision
         for platform in platforms:
@@ -294,7 +286,71 @@ class Ball(Thing):
         self.x_coord += self.x_speed
         self.y_coord += self.y_speed
 
+        if hit_platform:
+            self._initialize_carve_square()
+
+        for wall in walls:
+            buffer = 0
+            ball_left = self.x_coord - buffer
+            ball_right = self.x_coord + self.width + buffer
+            ball_top = self.y_coord - buffer
+            ball_bottom = self.y_coord + self.height + buffer
+            if (
+                ball_right >= wall.x_coord
+                and ball_left <= wall.x_coord + wall.width
+                and ball_bottom >= wall.y_coord
+                and ball_top <= wall.y_coord + wall.height
+            ):
+                wall.hide()
+
+        self._update_carve_square()
+
         return hit_platform
+
+    def _initialize_carve_square(self):
+        self._carve_top_left_corner = (self.x_coord, self.y_coord)
+        self._carve_top_right_corner = (self.x_coord + self.width, self.y_coord)
+        self._carve_bottom_left_corner = (self.x_coord, self.y_coord + self.height)
+        self._carve_bottom_right_corner = (
+            self.x_coord + self.width,
+            self.y_coord + self.height,
+        )
+        if self.x_speed > 0:
+            # Moving right
+            if self.y_speed > 0:
+                # Moving down
+                self._locked_corner = "top_left"
+            else:
+                # Moving up
+                self._locked_corner = "bottom_left"
+        else:
+            # Moving left
+            if self.y_speed > 0:
+                # Moving down
+                self._locked_corner = "top_right"
+            else:
+                # Moving up
+                self._locked_corner = "bottom_right"
+
+    def _update_carve_square(self):
+        # Update carve square dimensions
+        if self._locked_corner == "top_left":
+            self._carve_bottom_right_corner = (
+                self.x_coord + self.width + 1,
+                self.y_coord + self.height + 1,
+            )
+        elif self._locked_corner == "top_right":
+            self._carve_bottom_left_corner = (
+                self.x_coord - 1,
+                self.y_coord + self.height + 1,
+            )
+        elif self._locked_corner == "bottom_left":
+            self._carve_top_right_corner = (
+                self.x_coord + self.width + 1,
+                self.y_coord - 1,
+            )
+        elif self._locked_corner == "bottom_right":
+            self._carve_top_left_corner = (self.x_coord - 1, self.y_coord - 1)
 
 
 class Scene:
@@ -316,7 +372,6 @@ class Scene:
         self.offset_y = 0
         self._platforms_set = False
         self._platform_orientations = platform_orientations
-        self.ball_history = []
         self.walls = []
         self.carved = False
 
@@ -372,8 +427,6 @@ class Scene:
             hit_platform = self.ball.move(self.platforms, [], self.frame_count)
         else:
             hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count)
-
-        self.ball_history.append((self.ball.x_coord, self.ball.y_coord))
 
         self.adjust_camera()
 
