@@ -30,8 +30,7 @@ def finalize_video_with_music(
     click.echo("Converting midi to wave...")
 
     if new_instrument:
-        path, _ = midi_file_path.split(".mid")
-        new_mid_path = f"{path}_alter.mid"
+        new_mid_path = f"{get_cache_dir()}/alter.mid"
         change_instrument(midi_file_path, new_mid_path, new_instrument=new_instrument)
         midi_file_path = new_mid_path
 
