@@ -43,11 +43,15 @@ def change_instrument(
     midi_data.write(output_file_path)
 
 
-def get_frames_where_notes_happen(midi_file_path, fps, frame_buffer=0):
+def get_frames_where_notes_happen(
+    midi_file_path, fps, frame_buffer=0, isolate_track=None
+):
     # Load the MIDI file
     midi_data = pretty_midi.PrettyMIDI(midi_file_path)
     frames = set()
     for i, instrument in enumerate(midi_data.instruments, start=1):
+        if isolate_track and isolate_track == i:
+            continue
         for note in instrument.notes:
             frames.add(int(note.start * fps) + frame_buffer)
     return frames

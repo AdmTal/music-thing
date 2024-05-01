@@ -30,7 +30,6 @@ PLATFORM_HEIGHT = BALL_SIZE
 PLATFORM_WIDTH = BALL_SIZE // 2
 
 BALL_SPEED = 10
-MIDI_FILE = "wii-music.mid"
 FPS = 60
 FRAME_BUFFER = 15
 
@@ -147,7 +146,7 @@ class Platform(Thing):
 
 
 class Ball(Thing):
-    def __init__(self, x_coord, y_coord, size, color, speed,show_carve=False):
+    def __init__(self, x_coord, y_coord, size, color, speed, show_carve=False):
         super().__init__(x_coord, y_coord, size, size, color)
         self.x_speed = speed
         self.y_speed = speed
@@ -669,7 +668,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
 @click.option(
     "--midi",
     required=True,
-    default=MIDI_FILE,
+    default="wii-music.mid",
     type=click.Path(exists=True),
     help="Path to a MIDI file.",
 )
@@ -688,11 +687,23 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
 @click.option(
     "--show_carve",
     default=False,
-    type=bool,
+    is_flag=True,
     help="Generate a Carving Video",
 )
-def main(midi, max_frames, new_instrument, show_carve):
-    note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER)
+@click.option(
+    "--show_platform",
+    default=False,
+    is_flag=True,
+    help="Generate a Platform placement Video",
+)
+@click.option(
+    "--isolate_track",
+    default=None,
+    type=int,
+    help="General Midi program number for desired instrument https://en.wikipedia.org/wiki/General_MIDI",
+)
+def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_track):
+    note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, isolate_track)
     num_frames = max(note_frames) if max_frames is None else max_frames
     note_frames = {i for i in note_frames if i <= num_frames}
     click.echo(f"{midi} requires {num_frames} frames")
@@ -714,10 +725,28 @@ def main(midi, max_frames, new_instrument, show_carve):
     click.echo(f"\nRunning simulation to generate Platforms...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
+    video_file = f"{get_cache_dir()}/platform-scene.mp4"
+    writer = imageio.get_writer(video_file, fps=FPS)
     for _ in range(num_frames):
         scene.update()
+        if show_platform:
+            image = scene.render()
+            writer.append_data(np.array(image))
         progress = (scene.frame_count / num_frames) * 100
         click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
+
+    if show_platform:
+        finalize_video_with_music(
+            writer,
+            video_file,
+            "platform",
+            midi,
+            FPS,
+            SOUND_FONT_FILE_BETTER,
+            scene.frame_count,
+            FRAME_BUFFER,
+            new_instrument,
+        )
 
     scene.place_walls()
     walls = scene.walls
@@ -726,7 +755,14 @@ def main(midi, max_frames, new_instrument, show_carve):
         f"\nRunning the simulation again to carve the walls ({len(walls)} walls)..."
     )
     platforms = scene.platforms
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=show_carve)
+    ball = Ball(
+        BALL_START_X,
+        BALL_START_Y,
+        BALL_SIZE,
+        BALL_COLOR,
+        BALL_SPEED,
+        show_carve=show_carve,
+    )
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
@@ -736,8 +772,8 @@ def main(midi, max_frames, new_instrument, show_carve):
     writer = imageio.get_writer(video_file, fps=FPS)
     for curr in range(num_frames):
         scene.update()
-        image = scene.render()
         if show_carve:
+            image = scene.render()
             writer.append_data(np.array(image))
         progress = (scene.frame_count / num_frames) * 100
         click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
