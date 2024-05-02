@@ -569,7 +569,7 @@ class Scene:
             finalize_video_with_music(
                 writer,
                 video_file,
-                "platform",
+                filename,
                 midi,
                 FPS,
                 SOUND_FONT_FILE_BETTER,
@@ -612,12 +612,11 @@ def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
 
     progress_string = "".join(["T" if i else "F" for i in boolean_choice_list])
     prog_length = 60
-    trunc = f"({len(progress_string)-prog_length}):" if len(progress_string) >= prog_length else ""
-    print(f"{trunc}{progress_string[-(prog_length-len(trunc)):]}")
     expected = len(note_frames)
     actual = len(boolean_choice_list)
     progress = int((actual / expected) * 100)
-    click.echo(f"\rProgress: {progress}%\t\t", nl=False)
+    trunc = f"({len(progress_string)-prog_length}):" if len(progress_string) >= prog_length else ""
+    click.echo(f"\rProgress: {progress}%\t{trunc}{progress_string[-(prog_length-len(trunc)):]}", nl=False)
     if len(boolean_choice_list) == len(note_frames):
         if choices_are_valid(note_frames, boolean_choice_list):
             return boolean_choice_list
