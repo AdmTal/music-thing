@@ -692,7 +692,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     note_frames = {i for i in note_frames if i <= num_frames}
     click.echo(f"{midi} requires {num_frames} frames")
 
-    # Tune the backtracking alg to figure out where to place the platforms
+    # Run the backtracking alg to figure out where to place the platforms
     click.echo(f"Searching for valid placement for {len(note_frames)} platforms...")
     boolean_choice_list = get_valid_platform_choices(note_frames, [True])
     if not boolean_choice_list:
@@ -701,6 +701,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
         exit(0)
 
     # Convert `boolean_choice_list` to `choices`
+    # Choices is DICT, KEY=FRAME NUMBER, VAL=Bool for if the platform hit on this frame is Horizontal or Vertical
     choices = {}
     frame_list = sorted(list(note_frames))
     for idx, choice in enumerate(boolean_choice_list):
