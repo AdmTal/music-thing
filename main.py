@@ -713,9 +713,11 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
     scene.run_simulation(midi, "platform-scene", num_frames, show_platform, new_instrument)
 
+    # After the platforms are placed in the first simulation, place the walls
     scene.place_walls()
     walls = scene.walls
 
+    # Run the next simulation with the platforms and walls in place, and carve the walls
     click.echo(f"\nRunning the simulation again to carve the walls ({len(walls)} walls)...")
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=show_carve)
@@ -724,6 +726,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene.set_walls(walls)
     scene.run_simulation(midi, "carve-scene", num_frames, show_carve, new_instrument)
 
+    # Run the final simulation with the platforms and carved walls in place
     carved_walls = scene.walls
     click.echo(f"\nRunning the simulation again to make the video...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
@@ -732,6 +735,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene.set_walls(carved_walls, carved=True)
     scene.run_simulation(midi, "scene", num_frames, True, new_instrument)
 
+    # Show the big picture cause it's neat to look at
     scene.render_full_image().show()
 
     cleanup_cache_dir(get_cache_dir())
