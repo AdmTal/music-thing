@@ -27,9 +27,9 @@ BALL_START_Y = SCREEN_HEIGHT // 2
 
 BALL_SIZE = 35
 PLATFORM_HEIGHT = BALL_SIZE
-PLATFORM_WIDTH = BALL_SIZE // 2
+PLATFORM_WIDTH = BALL_SIZE // 3
 
-BALL_SPEED = 20
+BALL_SPEED = 15
 FPS = 60
 FRAME_BUFFER = 15
 
@@ -564,11 +564,11 @@ class Scene:
 
         return image
 
-    def run_simulation(self, midi, filename, num_frames, save_video, new_instrument):
+    def run_simulation(self, midi, filename, num_frames, save_video, new_instrument, change_colors=False):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
         for _ in range(num_frames):
-            self.update()
+            self.update(change_colors)
             if save_video:
                 writer.append_data(np.array(self.render()))
             progress = (self.frame_count / num_frames) * 100
@@ -632,9 +632,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
         # Prune the search tree here
         return None
 
-    next_choices = [True, False]
-    if random.choice([True, False]):
-        next_choices = [False, True]
+    next_choices = [random.choice([True, False, False]) for _ in range(100)]
 
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
@@ -683,7 +681,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
     "--isolate_track",
     default=None,
     type=int,
-    help="General Midi program number for desired instrument https://en.wikipedia.org/wiki/General_MIDI",
+    help="Animate the bouncing square to a single MIDI track",
 )
 def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_track):
     # Inspect the MIDI file to see which video frames line up with the music
@@ -726,6 +724,9 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene.set_walls(walls)
     scene.run_simulation(midi, "carve-scene", num_frames, show_carve, new_instrument)
 
+    # Give the user something to look at while the video generates
+    scene.render_full_image().show()
+
     # Run the final simulation with the platforms and carved walls in place
     carved_walls = scene.walls
     click.echo(f"\nRunning the simulation again to make the video...")
@@ -733,10 +734,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls, carved=True)
-    scene.run_simulation(midi, "scene", num_frames, True, new_instrument)
-
-    # Show the big picture because it's neat to look at
-    scene.render_full_image().show()
+    scene.run_simulation(midi, "scene", num_frames, True, new_instrument, True)
 
     cleanup_cache_dir(get_cache_dir())
 
