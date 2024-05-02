@@ -735,7 +735,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene.set_walls(carved_walls, carved=True)
     scene.run_simulation(midi, "scene", num_frames, True, new_instrument)
 
-    # Show the big picture cause it's neat to look at
+    # Show the big picture because it's neat to look at
     scene.render_full_image().show()
 
     cleanup_cache_dir(get_cache_dir())
