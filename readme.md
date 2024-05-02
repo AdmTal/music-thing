@@ -36,13 +36,16 @@ python main.py
 ### Help
 
 ```shell
-python main.py --help
 Usage: main.py [OPTIONS]
 
 Options:
   --midi PATH               Path to a MIDI file.  [required]
   --max_frames INTEGER      Max number of frames to generate
   --new_instrument INTEGER  General Midi program number for desired instrument
+                            https://en.wikipedia.org/wiki/General_MIDI
+  --show_carve              Generate a Carving Video
+  --show_platform           Generate a Platform placement Video
+  --isolate_track INTEGER   General Midi program number for desired instrument
                             https://en.wikipedia.org/wiki/General_MIDI
   --help                    Show this message and exit.
 ```

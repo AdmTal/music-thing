@@ -16,7 +16,7 @@ BALL_COLOR = "#e0194f"
 WALL_COLOR = "#3d3f41"
 PADDLE_COLOR = WALL_COLOR
 HIT_SHRINK = 0.3
-HIT_ANIMATION_LENGTH = 15
+HIT_ANIMATION_LENGTH = 10
 
 
 SCREEN_WIDTH = 1088
@@ -174,9 +174,7 @@ class Ball(Thing):
         draw = ImageDraw.Draw(image)
         # Calculate the size reduction effect
         if self.size_fade_frames_remaining > 0:
-            factor = 1 - HIT_SHRINK * (
-                animate_throb(self.size_fade_frames_remaining) / HIT_ANIMATION_LENGTH
-            )
+            factor = 1 - HIT_SHRINK * (animate_throb(self.size_fade_frames_remaining) / HIT_ANIMATION_LENGTH)
             spacer_factor = 1 - factor
             self.current_size = int(self.original_size * factor)
             spacer = int(self.current_size * spacer_factor)
@@ -268,9 +266,7 @@ class Ball(Thing):
                 overlap_bottom = plat_bottom - ball_top
 
                 # Determine the smallest overlap to resolve the collision minimally
-                min_overlap = min(
-                    overlap_left, overlap_right, overlap_top, overlap_bottom
-                )
+                min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
 
                 # Adjust ball's speed and position based on the minimal overlap side
                 if min_overlap == overlap_left:
@@ -308,18 +304,10 @@ class Ball(Thing):
 
         for wall in walls:
             # Get the minimum and maximum x and y values from the carving corners
-            ball_left = min(
-                self._carve_top_left_corner[0], self._carve_bottom_left_corner[0]
-            )
-            ball_right = max(
-                self._carve_top_right_corner[0], self._carve_bottom_right_corner[0]
-            )
-            ball_top = min(
-                self._carve_top_left_corner[1], self._carve_top_right_corner[1]
-            )
-            ball_bottom = max(
-                self._carve_bottom_left_corner[1], self._carve_bottom_right_corner[1]
-            )
+            ball_left = min(self._carve_top_left_corner[0], self._carve_bottom_left_corner[0])
+            ball_right = max(self._carve_top_right_corner[0], self._carve_bottom_right_corner[0])
+            ball_top = min(self._carve_top_left_corner[1], self._carve_top_right_corner[1])
+            ball_bottom = max(self._carve_bottom_left_corner[1], self._carve_bottom_right_corner[1])
 
             # Check collision with wall
             if (
@@ -338,10 +326,7 @@ class Ball(Thing):
         self._carve_top_left_corner = (self.x_coord, self.y_coord)
         self._carve_top_right_corner = (self.x_coord + self.width, self.y_coord)
         self._carve_bottom_left_corner = (self.x_coord, self.y_coord + self.height)
-        self._carve_bottom_right_corner = (
-            self.x_coord + self.width,
-            self.y_coord + self.height,
-        )
+        self._carve_bottom_right_corner = (self.x_coord + self.width, self.y_coord + self.height)
         if self.x_speed > 0:
             # Moving right
             if self.y_speed > 0:
@@ -360,22 +345,12 @@ class Ball(Thing):
                 self._locked_corner = "bottom_right"
 
     def _update_carve_square(self):
-        # Update carve square dimensions
         if self._locked_corner == "top_left":
-            self._carve_bottom_right_corner = (
-                self.x_coord + self.width + 1,
-                self.y_coord + self.height + 1,
-            )
+            self._carve_bottom_right_corner = (self.x_coord + self.width + 1, self.y_coord + self.height + 1)
         elif self._locked_corner == "top_right":
-            self._carve_bottom_left_corner = (
-                self.x_coord - 1,
-                self.y_coord + self.height + 1,
-            )
+            self._carve_bottom_left_corner = (self.x_coord - 1, self.y_coord + self.height + 1)
         elif self._locked_corner == "bottom_left":
-            self._carve_top_right_corner = (
-                self.x_coord + self.width + 1,
-                self.y_coord - 1,
-            )
+            self._carve_top_right_corner = (self.x_coord + self.width + 1, self.y_coord - 1)
         elif self._locked_corner == "bottom_right":
             self._carve_top_left_corner = (self.x_coord - 1, self.y_coord - 1)
 
@@ -404,9 +379,7 @@ class Scene:
 
     def set_platforms(self, platforms):
         self._platforms_set = True
-        self._platform_expectations = {
-            platform.expected_bounce_frame(): platform for platform in platforms
-        }
+        self._platform_expectations = {platform.expected_bounce_frame(): platform for platform in platforms}
         self.platforms = platforms
 
     def set_walls(self, walls, carved=False):
@@ -416,27 +389,22 @@ class Scene:
     def update(self, change_colors=False):
         self.frame_count += 1
 
-        # When the platforms are not set, we are creating them
+        # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
-            future_x, future_y = self.ball.predict_position()
+            # A note will play on this frame, so we need to put a Platform where the ball will be next
+            future_x, future_y = self.ball.predict_position(2)
+            # future_x, future_y = self.ball.x_coord, self.ball.y_coord
 
-            platform_orientation = self._platform_orientations.get(
-                self.frame_count,
-                False,
-            )
+            platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
             if platform_orientation:
                 pwidth, pheight = PLATFORM_HEIGHT, PLATFORM_WIDTH
                 new_platform_x = future_x - pwidth // 2
-                new_platform_y = (
-                    future_y - pheight if self.ball.y_speed < 0 else future_y + pheight
-                )
+                new_platform_y = future_y - pheight if self.ball.y_speed < 0 else future_y + pheight
             # Vertical orientation
             else:
                 pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
-                new_platform_x = (
-                    future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
-                )
+                new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
                 new_platform_y = future_y - pheight // 2
 
             new_platform = Platform(
@@ -449,7 +417,7 @@ class Scene:
             self.platforms.append(new_platform)
 
         # Move ball and check for collisions
-        # Skipping carved walls saves time - less collision
+        # If the walls are already carved, don't pass them into Move, since we can skip the collision checks
         if self.carved:
             hit_platform = self.ball.move(self.platforms, [], self.frame_count)
         else:
@@ -460,18 +428,13 @@ class Scene:
         if change_colors and hit_platform:
             hit_platform.color = random.choice(list(ImageColor.colormap.keys()))
 
-        if self._platforms_set:
-            if not hit_platform and self.frame_count in self._platform_expectations:
-                raise BadSimulaiton(
-                    f"Bounce should have happened on {self.frame_count} but did not"
-                )
-            if (
-                hit_platform
-                and self.frame_count != hit_platform.expected_bounce_frame()
-            ):
-                raise BadSimulaiton(
-                    f"A platform was hit on the wrong frame {self.frame_count}"
-                )
+        if not self._platforms_set:
+            return
+
+        if not hit_platform and self.frame_count in self._platform_expectations:
+            raise BadSimulaiton(f"Bounce should have happened on {self.frame_count} but did not")
+        if hit_platform and self.frame_count != hit_platform.expected_bounce_frame():
+            raise BadSimulaiton(f"A platform was hit on the wrong frame {self.frame_count}")
 
     def render(self) -> Image:
         image = Image.new(
@@ -508,14 +471,10 @@ class Scene:
 
         # Desired offsets based on ball's position
         desired_offset_x = (
-            self.ball.x_coord - edge_x
-            if self.ball.x_speed < 0
-            else self.ball.x_coord - (self.screen_width - edge_x)
+            self.ball.x_coord - edge_x if self.ball.x_speed < 0 else self.ball.x_coord - (self.screen_width - edge_x)
         )
         desired_offset_y = (
-            self.ball.y_coord - edge_y
-            if self.ball.y_speed < 0
-            else self.ball.y_coord - (self.screen_height - edge_y)
+            self.ball.y_coord - edge_y if self.ball.y_speed < 0 else self.ball.y_coord - (self.screen_height - edge_y)
         )
 
         # Smoothing factor
@@ -604,6 +563,30 @@ class Scene:
             )
 
         return image
+
+    def run_simulation(self, midi, filename, num_frames, save_video, new_instrument):
+        video_file = f"{get_cache_dir()}/{filename}.mp4"
+        writer = imageio.get_writer(video_file, fps=FPS)
+        for _ in range(num_frames):
+            self.update()
+            if save_video:
+                writer.append_data(np.array(self.render()))
+            progress = (self.frame_count / num_frames) * 100
+            click.echo(f"\r{progress:0.0f}% ({self.frame_count} frames)", nl=False)
+
+        if save_video:
+            click.echo(f"\nGenerating the {filename} video...")
+            finalize_video_with_music(
+                writer,
+                video_file,
+                "platform",
+                midi,
+                FPS,
+                SOUND_FONT_FILE_BETTER,
+                self.frame_count,
+                FRAME_BUFFER,
+                new_instrument,
+            )
 
 
 def choices_are_valid(note_frames, boolean_choice_list):
@@ -703,11 +686,13 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
     help="General Midi program number for desired instrument https://en.wikipedia.org/wiki/General_MIDI",
 )
 def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_track):
+    # Inspect the MIDI file to see which video frames line up with the music
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, isolate_track)
     num_frames = max(note_frames) if max_frames is None else max_frames
     note_frames = {i for i in note_frames if i <= num_frames}
     click.echo(f"{midi} requires {num_frames} frames")
 
+    # Tune the backtracking alg to figure out where to place the platforms
     click.echo(f"Searching for valid placement for {len(note_frames)} platforms...")
     boolean_choice_list = get_valid_platform_choices(note_frames, [True])
     if not boolean_choice_list:
@@ -725,71 +710,18 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     click.echo(f"\nRunning simulation to generate Platforms...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
-    video_file = f"{get_cache_dir()}/platform-scene.mp4"
-    writer = imageio.get_writer(video_file, fps=FPS)
-    for _ in range(num_frames):
-        scene.update()
-        if show_platform:
-            image = scene.render()
-            writer.append_data(np.array(image))
-        progress = (scene.frame_count / num_frames) * 100
-        click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
-
-    if show_platform:
-        finalize_video_with_music(
-            writer,
-            video_file,
-            "platform",
-            midi,
-            FPS,
-            SOUND_FONT_FILE_BETTER,
-            scene.frame_count,
-            FRAME_BUFFER,
-            new_instrument,
-        )
+    scene.run_simulation(midi, "platform-scene", num_frames, show_platform, new_instrument)
 
     scene.place_walls()
     walls = scene.walls
 
-    click.echo(
-        f"\nRunning the simulation again to carve the walls ({len(walls)} walls)..."
-    )
+    click.echo(f"\nRunning the simulation again to carve the walls ({len(walls)} walls)...")
     platforms = scene.platforms
-    ball = Ball(
-        BALL_START_X,
-        BALL_START_Y,
-        BALL_SIZE,
-        BALL_COLOR,
-        BALL_SPEED,
-        show_carve=show_carve,
-    )
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=show_carve)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
-
-    # Make a carving video
-    video_file = f"{get_cache_dir()}/carve-scene.mp4"
-    writer = imageio.get_writer(video_file, fps=FPS)
-    for curr in range(num_frames):
-        scene.update()
-        if show_carve:
-            image = scene.render()
-            writer.append_data(np.array(image))
-        progress = (scene.frame_count / num_frames) * 100
-        click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
-
-    if show_carve:
-        finalize_video_with_music(
-            writer,
-            video_file,
-            "carve",
-            midi,
-            FPS,
-            SOUND_FONT_FILE_BETTER,
-            scene.frame_count,
-            FRAME_BUFFER,
-            new_instrument,
-        )
+    scene.run_simulation(midi, "carve-scene", num_frames, show_carve, new_instrument)
 
     carved_walls = scene.walls
     click.echo(f"\nRunning the simulation again to make the video...")
@@ -797,31 +729,9 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls, carved=True)
+    scene.run_simulation(midi, "scene", num_frames, True, new_instrument)
 
-    video_file = f"{get_cache_dir()}/scene.mp4"
-    writer = imageio.get_writer(video_file, fps=FPS)
-    for curr in range(num_frames):
-        change_colors = True
-        scene.update(change_colors)
-        image = scene.render()
-        writer.append_data(np.array(image))
-        progress = (scene.frame_count / num_frames) * 100
-        click.echo(f"\r{progress:0.0f}% ({scene.frame_count} frames)", nl=False)
-
-    scene.place_walls()
-
-    click.echo(f"\nGenerating the video...")
-    finalize_video_with_music(
-        writer,
-        video_file,
-        "final",
-        midi,
-        FPS,
-        SOUND_FONT_FILE_BETTER,
-        scene.frame_count,
-        FRAME_BUFFER,
-        new_instrument,
-    )
+    scene.render_full_image().show()
 
     cleanup_cache_dir(get_cache_dir())
 
