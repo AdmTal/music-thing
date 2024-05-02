@@ -630,7 +630,9 @@ def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
         return None
 
     # There is opportunity here to add spice and bias the search to produce more interesting scenes
-    next_choices = [random.choice([True, False]) for _ in range(10)]
+    next_choices = [True, False]
+    if random.choice([True, False]):
+        next_choices = next_choices[::-1]
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
             note_frames,
