@@ -164,9 +164,6 @@ class Ball(Thing):
         self.show_carve = show_carve
 
     def hit(self):
-        self.explosion_fade_frames_remaining = HIT_ANIMATION_LENGTH
-
-    def hit(self):
         self.color_fade_frames_remaining = HIT_ANIMATION_LENGTH // 2
         self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
 
@@ -392,28 +389,21 @@ class Scene:
         # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
             # A note will play on this frame, so we need to put a Platform where the ball will be next
-            future_x, future_y = self.ball.predict_position(2)
-            # future_x, future_y = self.ball.x_coord, self.ball.y_coord
+            future_x, future_y = self.ball.predict_position(1)
 
             platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
             if platform_orientation:
                 pwidth, pheight = PLATFORM_HEIGHT, PLATFORM_WIDTH
-                new_platform_x = future_x - pwidth // 2
-                new_platform_y = future_y - pheight if self.ball.y_speed < 0 else future_y + pheight
+                new_platform_x = future_x + pwidth // 2 if self.ball.x_speed > 0 else future_x - pwidth // 2
+                new_platform_y = future_y - pheight if self.ball.y_speed < 0 else future_y + pheight * 2
             # Vertical orientation
             else:
                 pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
                 new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
-                new_platform_y = future_y - pheight // 2
+                new_platform_y = future_y + pheight // 2 if self.ball.y_speed < 0 else future_y - pheight // 2
 
-            new_platform = Platform(
-                new_platform_x,
-                new_platform_y,
-                pwidth,
-                pheight,
-                PADDLE_COLOR,
-            )
+            new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
             self.platforms.append(new_platform)
 
         # Move ball and check for collisions
@@ -616,7 +606,14 @@ def choices_are_valid(note_frames, boolean_choice_list):
     return True
 
 
-def get_valid_platform_choices(note_frames, boolean_choice_list):
+def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
+    if not boolean_choice_list:
+        boolean_choice_list.append(random.choice([True, False]))
+
+    progress_string = "".join(["T" if i else "F" for i in boolean_choice_list])
+    prog_length = 60
+    trunc = f"({len(progress_string)-prog_length}):" if len(progress_string) >= prog_length else ""
+    print(f"{trunc}{progress_string[-(prog_length-len(trunc)):]}")
     expected = len(note_frames)
     actual = len(boolean_choice_list)
     progress = int((actual / expected) * 100)
@@ -632,8 +629,8 @@ def get_valid_platform_choices(note_frames, boolean_choice_list):
         # Prune the search tree here
         return None
 
-    next_choices = [random.choice([True, False, False]) for _ in range(100)]
-
+    # There is opportunity here to add spice and bias the search to produce more interesting scenes
+    next_choices = [random.choice([True, False]) for _ in range(10)]
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
             note_frames,
@@ -692,7 +689,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
 
     # Run the backtracking alg to figure out where to place the platforms
     click.echo(f"Searching for valid placement for {len(note_frames)} platforms...")
-    boolean_choice_list = get_valid_platform_choices(note_frames, [True])
+    boolean_choice_list = get_valid_platform_choices(note_frames)
     if not boolean_choice_list:
         click.echo("\nCould not figure out platforms :(")
         click.echo("\nTry changing ball and platform size, and speed")
