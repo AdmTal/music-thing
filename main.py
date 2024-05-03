@@ -630,7 +630,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
     if not boolean_choice_list:
         boolean_choice_list.append(random.choice([True, False]))
 
-    progress_string = "".join(["T" if i else "F" for i in boolean_choice_list])
+    progress_string = "".join(["─" if i else "|" for i in boolean_choice_list])
     prog_length = 60
     expected = len(note_frames)
     actual = len(boolean_choice_list)
