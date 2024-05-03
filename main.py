@@ -227,7 +227,7 @@ class Ball(Thing):
         future_y = self.y_coord + self.y_speed * frames
         return future_x, future_y
 
-    def move(self, platforms, walls, frame):
+    def move(self, platforms, walls, frame, visible_bounds):
         # Calculate potential next position of the ball
         next_x = self.x_coord
         next_y = self.y_coord
@@ -300,6 +300,8 @@ class Ball(Thing):
             self._initialize_carve_square()
 
         for wall in walls:
+            if not wall.in_frame(visible_bounds):
+                continue
             # Get the minimum and maximum x and y values from the carving corners
             ball_left = min(self._carve_top_left_corner[0], self._carve_bottom_left_corner[0])
             ball_right = max(self._carve_top_right_corner[0], self._carve_bottom_right_corner[0])
@@ -406,12 +408,21 @@ class Scene:
             new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
             self.platforms.append(new_platform)
 
+        hw = self.screen_width // 2
+        hh = self.screen_height // 2
+        visible_bounds = (
+            self.offset_x - hw,
+            self.offset_x + self.screen_width + hw,
+            self.offset_y - hh,
+            self.offset_y + self.screen_height + hh,
+        )
+
         # Move ball and check for collisions
         # If the walls are already carved, don't pass them into Move, since we can skip the collision checks
         if self.carved:
-            hit_platform = self.ball.move(self.platforms, [], self.frame_count)
+            hit_platform = self.ball.move(self.platforms, [], self.frame_count, visible_bounds)
         else:
-            hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count)
+            hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count, visible_bounds)
 
         self.adjust_camera()
 
@@ -643,6 +654,13 @@ def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
     return None
 
 
+def parse_isolate_tracks(ctx, param, value):
+    try:
+        return [int(track.strip()) for track in value.split(",")]
+    except Exception as e:
+        raise click.BadParameter("Track numbers must be a comma-delimited list of integers.")
+
+
 @click.command()
 @click.option(
     "--midi",
@@ -676,14 +694,15 @@ def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
     help="Generate a Platform placement Video",
 )
 @click.option(
-    "--isolate_track",
+    "--isolate_tracks",
     default=None,
-    type=int,
-    help="Animate the bouncing square to a single MIDI track",
+    type=str,
+    help="Comma delimited list of track numbers to animate the ball to",
+    callback=parse_isolate_tracks,
 )
-def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_track):
+def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tracks):
     # Inspect the MIDI file to see which video frames line up with the music
-    note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, isolate_track)
+    note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, isolate_tracks)
     num_frames = max(note_frames) if max_frames is None else max_frames
     note_frames = {i for i in note_frames if i <= num_frames}
     click.echo(f"{midi} requires {num_frames} frames")
@@ -723,7 +742,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene.run_simulation(midi, "carve-scene", num_frames, show_carve, new_instrument)
 
     # Give the user something to look at while the video generates
-    scene.render_full_image().show()
+    # scene.render_full_image().show()
 
     # Run the final simulation with the platforms and carved walls in place
     carved_walls = scene.walls
