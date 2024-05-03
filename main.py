@@ -235,6 +235,8 @@ class Ball(Thing):
 
         # Check each platform for a possible collision
         for platform in platforms:
+            if not platform.in_frame(visible_bounds):
+                continue
             # Define the bounds of the ball at its next position
             ball_left = next_x
             ball_right = next_x + self.width
@@ -408,13 +410,11 @@ class Scene:
             new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
             self.platforms.append(new_platform)
 
-        hw = self.screen_width // 2
-        hh = self.screen_height // 2
         visible_bounds = (
-            self.offset_x - hw,
-            self.offset_x + self.screen_width + hw,
-            self.offset_y - hh,
-            self.offset_y + self.screen_height + hh,
+            self.offset_x - self.screen_width,
+            self.offset_x + (2 * self.screen_width),
+            self.offset_y - self.screen_height,
+            self.offset_y + (2 * self.screen_height),
         )
 
         # Move ball and check for collisions
@@ -539,8 +539,15 @@ class Scene:
         image = Image.new("RGB", (img_width, img_height), BG_COLOR)
         draw = ImageDraw.Draw(image)
 
+        visible_bounds = (
+            self.offset_x,
+            self.offset_x + self.screen_width,
+            self.offset_y,
+            self.offset_y + self.screen_height,
+        )
+
         for wall in self.walls:
-            if not wall.visible:
+            if not wall.visible or not wall.in_frame(visible_bounds):
                 continue
             draw.rectangle(
                 [
@@ -553,6 +560,8 @@ class Scene:
             )
 
         for platform in self.platforms:
+            if not platform.in_frame(visible_bounds):
+                continue
             draw.rectangle(
                 [
                     platform.x_coord - min_x,
@@ -703,6 +712,7 @@ def parse_isolate_tracks(ctx, param, value):
     callback=parse_isolate_tracks,
 )
 def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tracks):
+    song_name = midi.split('/')[-1].split('.mid')[0]
     # Inspect the MIDI file to see which video frames line up with the music
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, isolate_tracks)
     num_frames = max(note_frames) if max_frames is None else max_frames
@@ -710,7 +720,8 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     click.echo(f"{midi} requires {num_frames} frames")
 
     # Run the backtracking alg to figure out where to place the platforms
-    click.echo(f"Searching for valid placement for {len(note_frames)} platforms...")
+    num_platforms = len(note_frames)
+    click.echo(f"Searching for valid placement for {num_platforms} platforms...")
     boolean_choice_list = get_valid_platform_choices(note_frames)
     if not boolean_choice_list:
         click.echo("\nCould not figure out platforms :(")
@@ -725,23 +736,23 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
         choices[frame_list[idx]] = choice
     num_frames = max(choices.keys())
 
-    click.echo(f"\nRunning simulation to generate Platforms...")
+    click.echo(f"\nRunning simulation to place {num_platforms} platforms...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
-    scene.run_simulation(midi, "platform-scene", num_frames, show_platform, new_instrument)
+    scene.run_simulation(midi, f"{song_name}-platforms", num_frames, show_platform, new_instrument)
 
     # After the platforms are placed in the first simulation, place the walls
     scene.place_walls()
     walls = scene.walls
 
     # Run the next simulation with the platforms and walls in place, and carve the walls
-    click.echo(f"\nRunning the simulation again to carve the walls ({len(walls)} walls)...")
+    click.echo(f"\nRunning the simulation again to carve {len(walls)} walls)...")
     platforms = scene.platforms
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=show_carve)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
-    scene.run_simulation(midi, "carve-scene", num_frames, show_carve, new_instrument)
+    scene.run_simulation(midi, f"{song_name}", num_frames, show_carve, new_instrument)
 
     # Give the user something to look at while the video generates
     # scene.render_full_image().show()
@@ -753,7 +764,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls, carved=True)
-    scene.run_simulation(midi, "scene", num_frames, True, new_instrument, True)
+    scene.run_simulation(midi, f"{song_name}", num_frames, True, new_instrument, True)
 
     cleanup_cache_dir(get_cache_dir())
 
