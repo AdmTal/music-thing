@@ -655,6 +655,8 @@ def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
 
 
 def parse_isolate_tracks(ctx, param, value):
+    if not value:
+        return
     try:
         return [int(track.strip()) for track in value.split(",")]
     except Exception as e:
