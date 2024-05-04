@@ -1,5 +1,17 @@
 # Music Thing
 
+TLDR - I didn't come up with the idea for this video; I saw someone else do it and thought it would be fun to try recreating it myself.
+
+However - the code in this repo takes a MIDI file, and creates a video like this:
+
+https://github.com/AdmTal/music-thing/assets/3382568/470d4db7-dd4b-4761-85f7-bf967de41600
+
+# Repo Quality
+
+I work on this repo for fun to blow off steam - It's a mess, please don't judge me on it's quality.  It's just a junk drawer repo for fun.
+
+# Longer History
+
 I'm trying to make videos like this https://www.tiktok.com/@jb.reddit
 
 I've seen many others like it on TikTok by other creators.
@@ -17,8 +29,6 @@ You can run this with any MIDI file
 Update - I found the repo!  https://github.com/quasar098/midi-playground
 
 It's incredible - go look at that instead
-
-
 
 # How to Run
 
