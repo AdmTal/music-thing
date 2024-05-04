@@ -349,7 +349,7 @@ class Scene:
         # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
             # A note will play on this frame, so we need to put a Platform where the ball will be next
-            future_x, future_y = self.ball.predict_position(1)
+            future_x, future_y = self.ball.predict_position(2)
 
             platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
@@ -495,15 +495,8 @@ class Scene:
         image = Image.new("RGB", (img_width, img_height), BG_COLOR)
         draw = ImageDraw.Draw(image)
 
-        visible_bounds = (
-            self.offset_x,
-            self.offset_x + self.screen_width,
-            self.offset_y,
-            self.offset_y + self.screen_height,
-        )
-
         for wall in self.walls:
-            if not wall.visible or not wall.in_frame(visible_bounds):
+            if not wall.visible:
                 continue
             draw.rectangle(
                 [
@@ -516,8 +509,6 @@ class Scene:
             )
 
         for platform in self.platforms:
-            if not platform.in_frame(visible_bounds):
-                continue
             draw.rectangle(
                 [
                     platform.x_coord - min_x,
