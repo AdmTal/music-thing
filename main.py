@@ -551,7 +551,7 @@ class Scene:
 
         if save_video:
             click.echo(f"\nGenerating the {filename} video...")
-            finalize_video_with_music(
+            vid_name = finalize_video_with_music(
                 writer,
                 video_file,
                 filename,
@@ -563,7 +563,7 @@ class Scene:
                 new_instrument,
                 isolated_tracks,
             )
-            self.render_full_image().save(f"{filename}.png")
+            self.render_full_image().save(f"{vid_name.split('.mp4')[0]}.png")
 
 
 def choices_are_valid(note_frames, boolean_choice_list):
