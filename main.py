@@ -10,6 +10,8 @@ from src.midi_stuff import (
 )
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir, cleanup_cache_dir
+from src.animation_stuff import animate_throb, lerp
+from src.color_stuff import fade_color, brighten_color
 
 BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
@@ -36,55 +38,6 @@ FRAME_BUFFER = 15
 
 class BadSimulaiton(Exception):
     pass
-
-
-def lerp(start, end, alpha):
-    """Linearly interpolates between start and end."""
-    return start + (end - start) * alpha
-
-
-def animate_throb(n, peak=HIT_ANIMATION_LENGTH // 2, width=HIT_ANIMATION_LENGTH):
-    # Calculate the cycle midpoint based on the specified width
-    midpoint = width // 2
-    # Calculate the current position in the cycle using modulo operation
-    position_in_cycle = abs((n - 1) % width - midpoint)
-    # Generate the triangular value based on distance from midpoint
-    return peak - position_in_cycle
-
-
-def brighten_color(hex_color, increase=20):
-    # Convert hex to RGB
-    r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
-
-    # Brighten the color
-    r = min(255, r + increase)
-    g = min(255, g + increase)
-    b = min(255, b + increase)
-
-    # Convert back to hex
-    return f"#{r:02x}{g:02x}{b:02x}"
-
-
-def fade_color(start_color_hex, dest_color_hex, num_frames, curr_frame_number):
-    # Extract RGB components from hexadecimal color values
-    r_start, g_start, b_start = (
-        int(start_color_hex[1:3], 16),
-        int(start_color_hex[3:5], 16),
-        int(start_color_hex[5:7], 16),
-    )
-    r_end, g_end, b_end = (
-        int(dest_color_hex[1:3], 16),
-        int(dest_color_hex[3:5], 16),
-        int(dest_color_hex[5:7], 16),
-    )
-
-    # Calculate the current color's RGB values using linear interpolation
-    r_curr = int(r_start + (r_end - r_start) * (curr_frame_number / num_frames))
-    g_curr = int(g_start + (g_end - g_start) * (curr_frame_number / num_frames))
-    b_curr = int(b_start + (b_end - b_start) * (curr_frame_number / num_frames))
-
-    # Return the current color in hexadecimal format
-    return f"#{r_curr:02x}{g_curr:02x}{b_curr:02x}"
 
 
 class Thing:
@@ -171,7 +124,10 @@ class Ball(Thing):
         draw = ImageDraw.Draw(image)
         # Calculate the size reduction effect
         if self.size_fade_frames_remaining > 0:
-            factor = 1 - HIT_SHRINK * (animate_throb(self.size_fade_frames_remaining) / HIT_ANIMATION_LENGTH)
+            throb = animate_throb(
+                self.size_fade_frames_remaining, peak=HIT_ANIMATION_LENGTH // 2, width=HIT_ANIMATION_LENGTH
+            )
+            factor = 1 - HIT_SHRINK * (throb / HIT_ANIMATION_LENGTH)
             spacer_factor = 1 - factor
             self.current_size = int(self.original_size * factor)
             spacer = int(self.current_size * spacer_factor)
@@ -359,17 +315,17 @@ class Ball(Thing):
 class Scene:
     def __init__(
         self,
-        screen_width,
-        screen_height,
-        ball,
-        bounce_frames=[],
-        platform_orientations={},
+        screen_width: int,
+        screen_height: int,
+        ball: Ball,
+        bounce_frames: set = None,
+        platform_orientations: dict = None,
     ):
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.ball = ball
         self.platforms = []
-        self.bounce_frames = set(bounce_frames)
+        self.bounce_frames = bounce_frames
         self.frame_count = 0
         self.offset_x = 0
         self.offset_y = 0
@@ -574,7 +530,16 @@ class Scene:
 
         return image
 
-    def run_simulation(self, midi, filename, num_frames, save_video, new_instrument, change_colors=False):
+    def run_simulation(
+        self,
+        midi,
+        filename,
+        num_frames,
+        save_video,
+        new_instrument,
+        isolated_tracks,
+        change_colors=False,
+    ):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
         for _ in range(num_frames):
@@ -596,7 +561,9 @@ class Scene:
                 self.frame_count,
                 FRAME_BUFFER,
                 new_instrument,
+                isolated_tracks,
             )
+            self.render_full_image().save(f"{filename}.png")
 
 
 def choices_are_valid(note_frames, boolean_choice_list):
@@ -626,7 +593,7 @@ def choices_are_valid(note_frames, boolean_choice_list):
     return True
 
 
-def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
+def get_valid_platform_choices(note_frames: set, boolean_choice_list: list = []):
     if not boolean_choice_list:
         boolean_choice_list.append(random.choice([True, False]))
 
@@ -663,7 +630,7 @@ def get_valid_platform_choices(note_frames, boolean_choice_list=[]):
     return None
 
 
-def parse_isolate_tracks(ctx, param, value):
+def parse_animate_tracks(ctx, param, value):
     if not value:
         return
     try:
@@ -705,19 +672,29 @@ def parse_isolate_tracks(ctx, param, value):
     help="Generate a Platform placement Video",
 )
 @click.option(
-    "--isolate_tracks",
+    "--animate_tracks",
     default=None,
     type=str,
     help="Comma delimited list of track numbers to animate the ball to",
-    callback=parse_isolate_tracks,
+    callback=parse_animate_tracks,
 )
-def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tracks):
-    song_name = midi.split('/')[-1].split('.mid')[0]
+@click.option(
+    "--isolate_tracks",
+    default=False,
+    is_flag=True,
+    help="Mute all non animated tracks",
+)
+def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate_tracks):
+    song_name = midi.split("/")[-1].split(".mid")[0]
     # Inspect the MIDI file to see which video frames line up with the music
-    note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, isolate_tracks)
+    note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, animate_tracks)
     num_frames = max(note_frames) if max_frames is None else max_frames
     note_frames = {i for i in note_frames if i <= num_frames}
     click.echo(f"{midi} requires {num_frames} frames")
+
+    isolated_tracks = None
+    if isolate_tracks:
+        isolated_tracks = animate_tracks
 
     # Run the backtracking alg to figure out where to place the platforms
     num_platforms = len(note_frames)
@@ -739,7 +716,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     click.echo(f"\nRunning simulation to place {num_platforms} platforms...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
-    scene.run_simulation(midi, f"{song_name}-platforms", num_frames, show_platform, new_instrument)
+    scene.run_simulation(midi, f"{song_name}-platforms", num_frames, show_platform, new_instrument, isolated_tracks)
 
     # After the platforms are placed in the first simulation, place the walls
     scene.place_walls()
@@ -752,10 +729,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
-    scene.run_simulation(midi, f"{song_name}", num_frames, show_carve, new_instrument)
-
-    # Give the user something to look at while the video generates
-    # scene.render_full_image().show()
+    scene.run_simulation(midi, f"{song_name}", num_frames, show_carve, new_instrument, isolated_tracks)
 
     # Run the final simulation with the platforms and carved walls in place
     carved_walls = scene.walls
@@ -764,7 +738,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, isolate_tr
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls, carved=True)
-    scene.run_simulation(midi, f"{song_name}", num_frames, True, new_instrument, True)
+    scene.run_simulation(midi, f"{song_name}", num_frames, True, new_instrument, isolated_tracks, True)
 
     cleanup_cache_dir(get_cache_dir())
 

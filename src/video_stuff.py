@@ -7,7 +7,7 @@ from moviepy.editor import VideoFileClip, AudioFileClip
 from pydub import AudioSegment
 
 from src.midi_stuff import convert_midi_to_wav, change_instrument
-from src.cache_stuff import get_cache_dir, cleanup_cache_dir
+from src.cache_stuff import get_cache_dir
 
 
 def finalize_video_with_music(
@@ -20,6 +20,7 @@ def finalize_video_with_music(
     frames_written,
     frame_offset,
     new_instrument=None,
+    isolated_tracks=None,
 ):
     # Ensure the writer is closed
     writer.close()
@@ -31,7 +32,12 @@ def finalize_video_with_music(
 
     if new_instrument:
         new_mid_path = f"{get_cache_dir()}/alter.mid"
-        change_instrument(midi_file_path, new_mid_path, new_instrument=new_instrument)
+        change_instrument(
+            midi_file_path,
+            new_mid_path,
+            new_instrument=new_instrument,
+            isolated_tracks=isolated_tracks,
+        )
         midi_file_path = new_mid_path
 
     convert_midi_to_wav(

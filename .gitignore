@@ -1,5 +1,6 @@
 .cache/*
 *.mp4
+*.png
 .cache
 .idea/*
 venv/*

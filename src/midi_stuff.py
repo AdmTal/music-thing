@@ -21,6 +21,7 @@ def change_instrument(
     output_file_path,
     new_instrument=0,
     new_volume=127,
+    isolated_tracks=None,
 ):
     # Load MIDI file
     midi_data = pretty_midi.PrettyMIDI(midi_file_path)
@@ -29,10 +30,15 @@ def change_instrument(
     volume_level = max(0, min(new_volume, 127))
 
     # Iterate over all instrument tracks
-    for instrument in midi_data.instruments:
+    for i, instrument in enumerate(midi_data.instruments, start=1):
         # Change the instrument program (0 is Acoustic Grand Piano, etc.)
         instrument.program = new_instrument
         # Create and append the volume control change at the beginning of the track
+        if isolated_tracks and i not in isolated_tracks:
+            instrument.is_drum = False
+            instrument.notes = []
+            continue
+
         volume_change = pretty_midi.ControlChange(number=7, value=volume_level, time=0)
         instrument.control_changes.append(volume_change)
 
@@ -43,12 +49,12 @@ def change_instrument(
     midi_data.write(output_file_path)
 
 
-def get_frames_where_notes_happen(midi_file_path, fps, frame_buffer=0, isolate_tracks=[]):
+def get_frames_where_notes_happen(midi_file_path, fps, frame_buffer=0, animate_tracks=[]):
     # Load the MIDI file
     midi_data = pretty_midi.PrettyMIDI(midi_file_path)
     frames = set()
     for i, instrument in enumerate(midi_data.instruments, start=1):
-        if isolate_tracks and i not in isolate_tracks:
+        if animate_tracks and i not in animate_tracks:
             continue
         for note in instrument.notes:
             frames.add(int(note.start * fps) + frame_buffer)

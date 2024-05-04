@@ -45,7 +45,8 @@ Options:
                             https://en.wikipedia.org/wiki/General_MIDI
   --show_carve              Generate a Carving Video
   --show_platform           Generate a Platform placement Video
-  --isolate_tracks TEXT     Comma delimited list of track numbers to animate
+  --animate_tracks TEXT     Comma delimited list of track numbers to animate
                             the ball to
+  --isolate_tracks          Mute all non animated tracks
   --help                    Show this message and exit.
 ```
