@@ -18,7 +18,7 @@ BALL_COLOR = "#e0194f"
 WALL_COLOR = "#3d3f41"
 PADDLE_COLOR = WALL_COLOR
 HIT_SHRINK = 0.3
-HIT_ANIMATION_LENGTH = 10
+HIT_ANIMATION_LENGTH = 8
 
 
 SCREEN_WIDTH = 1088
@@ -31,12 +31,12 @@ BALL_SIZE = 35
 PLATFORM_HEIGHT = BALL_SIZE
 PLATFORM_WIDTH = BALL_SIZE // 3
 
-BALL_SPEED = 15
+BALL_SPEED = 10
 FPS = 60
 FRAME_BUFFER = 15
 
 
-class BadSimulaiton(Exception):
+class BadSimulation(Exception):
     pass
 
 
@@ -125,7 +125,9 @@ class Ball(Thing):
         # Calculate the size reduction effect
         if self.size_fade_frames_remaining > 0:
             throb = animate_throb(
-                self.size_fade_frames_remaining, peak=HIT_ANIMATION_LENGTH // 2, width=HIT_ANIMATION_LENGTH
+                -self.size_fade_frames_remaining,
+                peak=HIT_ANIMATION_LENGTH // 2,
+                width=HIT_ANIMATION_LENGTH,
             )
             factor = 1 - HIT_SHRINK * (throb / HIT_ANIMATION_LENGTH)
             spacer_factor = 1 - factor
@@ -146,7 +148,7 @@ class Ball(Thing):
             [left, top, right, bottom],
             outline=self.get_color(),
             fill=None,
-            width=5,
+            width=3,
         )
 
         if self.show_carve:
@@ -389,9 +391,9 @@ class Scene:
             return
 
         if not hit_platform and self.frame_count in self._platform_expectations:
-            raise BadSimulaiton(f"Bounce should have happened on {self.frame_count} but did not")
+            raise BadSimulation(f"Bounce should have happened on {self.frame_count} but did not")
         if hit_platform and self.frame_count != hit_platform.expected_bounce_frame():
-            raise BadSimulaiton(f"A platform was hit on the wrong frame {self.frame_count}")
+            raise BadSimulation(f"A platform was hit on the wrong frame {self.frame_count}")
 
     def render(self) -> Image:
         image = Image.new(
@@ -578,7 +580,7 @@ def choices_are_valid(note_frames, boolean_choice_list):
     try:
         for _ in range(num_frames):
             scene.update()
-    except BadSimulaiton:
+    except BadSimulation:
         return False
 
     return True
