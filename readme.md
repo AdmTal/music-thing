@@ -51,14 +51,15 @@ python main.py
 Usage: main.py [OPTIONS]
 
 Options:
-  --midi PATH               Path to a MIDI file.  [required]
-  --max_frames INTEGER      Max number of frames to generate
-  --new_instrument INTEGER  General Midi program number for desired instrument
-                            https://en.wikipedia.org/wiki/General_MIDI
-  --show_carve              Generate a Carving Video
-  --show_platform           Generate a Platform placement Video
-  --animate_tracks TEXT     Comma delimited list of track numbers to animate
-                            the ball to
-  --isolate_tracks          Mute all non animated tracks
-  --help                    Show this message and exit.
+  -m, --midi PATH                Path to a MIDI file.  [required]
+  -mf, --max_frames INTEGER      Max number of frames to generate
+  -ni, --new_instrument INTEGER  General Midi program number for desired
+                                 instrument
+                                 https://en.wikipedia.org/wiki/General_MIDI
+  -at, --animate_tracks TEXT     Comma delimited list of track numbers to
+                                 animate the ball to
+  -i, --isolate                  Mute all non animated tracks
+  --show_carve                   Generate a Carving Video
+  --show_platform                Generate a Platform placement Video
+  --help                         Show this message and exit.
 ```

@@ -21,8 +21,8 @@ HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
 
 
-SCREEN_WIDTH = 1088
-SCREEN_HEIGHT = 1920
+SCREEN_WIDTH = 880
+SCREEN_HEIGHT = 1536
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
@@ -635,6 +635,7 @@ def parse_animate_tracks(ctx, param, value):
 @click.command()
 @click.option(
     "--midi",
+    "-m",
     required=True,
     default="wii-music.mid",
     type=click.Path(exists=True),
@@ -642,15 +643,32 @@ def parse_animate_tracks(ctx, param, value):
 )
 @click.option(
     "--max_frames",
+    "-mf",
     default=None,
     type=int,
     help="Max number of frames to generate",
 )
 @click.option(
     "--new_instrument",
+    "-ni",
     default=None,
     type=int,
     help="General Midi program number for desired instrument https://en.wikipedia.org/wiki/General_MIDI",
+)
+@click.option(
+    "--animate_tracks",
+    "-at",
+    default=None,
+    type=str,
+    help="Comma delimited list of track numbers to animate the ball to",
+    callback=parse_animate_tracks,
+)
+@click.option(
+    "--isolate",
+    "-i",
+    default=False,
+    is_flag=True,
+    help="Mute all non animated tracks",
 )
 @click.option(
     "--show_carve",
@@ -664,20 +682,7 @@ def parse_animate_tracks(ctx, param, value):
     is_flag=True,
     help="Generate a Platform placement Video",
 )
-@click.option(
-    "--animate_tracks",
-    default=None,
-    type=str,
-    help="Comma delimited list of track numbers to animate the ball to",
-    callback=parse_animate_tracks,
-)
-@click.option(
-    "--isolate_tracks",
-    default=False,
-    is_flag=True,
-    help="Mute all non animated tracks",
-)
-def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate_tracks):
+def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate):
     song_name = midi.split("/")[-1].split(".mid")[0]
     # Inspect the MIDI file to see which video frames line up with the music
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, animate_tracks)
@@ -686,7 +691,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tr
     click.echo(f"{midi} requires {num_frames} frames")
 
     isolated_tracks = None
-    if isolate_tracks:
+    if isolate:
         isolated_tracks = animate_tracks
 
     # Run the backtracking alg to figure out where to place the platforms
@@ -733,7 +738,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tr
     scene.set_walls(carved_walls, carved=True)
     scene.run_simulation(midi, f"{song_name}", num_frames, True, new_instrument, isolated_tracks, True)
 
-    cleanup_cache_dir(get_cache_dir())
+    cleanup_cache_dir()
 
 
 if __name__ == "__main__":

@@ -16,5 +16,5 @@ def get_cache_dir():
     return _cache_dir
 
 
-def cleanup_cache_dir(cache_dir):
-    shutil.rmtree(cache_dir)
+def cleanup_cache_dir():
+    shutil.rmtree(get_cache_dir())

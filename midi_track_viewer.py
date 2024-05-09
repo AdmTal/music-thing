@@ -91,7 +91,7 @@ def main(midi):
         clock.tick(frame_rate)
 
     pygame.quit()
-    cleanup_cache_dir(get_cache_dir())
+    cleanup_cache_dir()
 
 
 if __name__ == "__main__":
