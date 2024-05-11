@@ -190,6 +190,7 @@ class Ball(Thing):
         next_x = self.x_coord
         next_y = self.y_coord
         hit_platform = None
+        is_carving = len(walls) > 0
 
         # Check each platform for a possible collision
         for platform in platforms:
@@ -256,7 +257,7 @@ class Ball(Thing):
         self.x_coord += self.x_speed
         self.y_coord += self.y_speed
 
-        if hit_platform:
+        if is_carving and hit_platform:
             self._initialize_carve_square()
 
         for wall in walls:
@@ -277,7 +278,8 @@ class Ball(Thing):
             ):
                 wall.hide()
 
-        self._update_carve_square()
+        if is_carving:
+            self._update_carve_square()
 
         return hit_platform
 
