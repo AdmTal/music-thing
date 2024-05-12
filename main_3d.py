@@ -51,7 +51,7 @@ class BadSimulation(Exception):
 
 
 def px_to_unit(px):
-    return px * 0.011
+    return px * 0.012
 
 
 class Thing:
