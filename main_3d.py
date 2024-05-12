@@ -16,11 +16,10 @@ from src.color_stuff import fade_color, brighten_color
 
 BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
-WALL_COLOR = "#3d3f41"
+WALL_COLOR = "#5bb1cd"
 PADDLE_COLOR = WALL_COLOR
 HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
-
 
 SCREEN_WIDTH = 624
 SCREEN_HEIGHT = 624
@@ -30,8 +29,8 @@ BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
 BALL_SIZE = 35
-PLATFORM_HEIGHT = BALL_SIZE
-PLATFORM_WIDTH = BALL_SIZE // 3
+PLATFORM_HEIGHT = BALL_SIZE * 2
+PLATFORM_WIDTH = BALL_SIZE // 2
 
 BALL_SPEED = 10
 FPS = 60
@@ -41,8 +40,8 @@ FRAME_BUFFER = 15
 app = Ursina()
 window.color = color.white
 window.size = (SCREEN_WIDTH, SCREEN_HEIGHT)
-camera.position = (3, 3, -DEPTH)
-PointLight(position=(0, 0, -DEPTH), color=color.white, eternal=True)
+camera.position = (3, 3, -DEPTH + 2)
+PointLight(position=(3, 3, -DEPTH // 2), color=color.white, eternal=True)
 AmbientLight(color=(0.5, 0.5, 0.5, 1), eternal=True)
 
 
@@ -81,7 +80,7 @@ class Thing:
             position=(
                 px_to_unit(x),
                 px_to_unit(y),
-                self.depth + extra_d,
+                0,
             ),
             scale=(
                 px_to_unit(self.width),
@@ -165,7 +164,7 @@ class Ball(Thing):
             position=(
                 px_to_unit(x),
                 px_to_unit(y),
-                self.depth,
+                0,
             ),
             scale=(
                 px_to_unit(self.width),
