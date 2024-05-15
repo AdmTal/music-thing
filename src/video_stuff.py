@@ -21,6 +21,7 @@ def finalize_video_with_music(
     frame_offset,
     new_instrument=None,
     isolated_tracks=None,
+    sustain_pedal=None,
 ):
     # Ensure the writer is closed
     writer.close()
@@ -37,6 +38,7 @@ def finalize_video_with_music(
             new_mid_path,
             new_instrument=new_instrument,
             isolated_tracks=isolated_tracks,
+            sustain_pedal=sustain_pedal,
         )
         midi_file_path = new_mid_path
 

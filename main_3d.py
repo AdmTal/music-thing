@@ -22,26 +22,27 @@ HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
 
 SCREEN_WIDTH = 624
-SCREEN_HEIGHT = 624
-DEPTH = 15
+SCREEN_HEIGHT = 624 * 2
+DEPTH = 20
+CAM_DEPTH = -15
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
-BALL_SIZE = 35
+BALL_SIZE = 50
 PLATFORM_HEIGHT = BALL_SIZE * 2
-PLATFORM_WIDTH = BALL_SIZE // 2
+PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 10
+BALL_SPEED = 15
 FPS = 60
 FRAME_BUFFER = 15
 
 
 app = Ursina()
-window.color = color.white
+window.color = color.smoke
 window.size = (SCREEN_WIDTH, SCREEN_HEIGHT)
-camera.position = (3, 3, -DEPTH + 2)
-PointLight(position=(3, 3, -DEPTH // 2), color=color.white, eternal=True)
+camera.position = (3.5, 6, CAM_DEPTH)
+PointLight(position=(3.5, 6, CAM_DEPTH * 2), color=color.white, eternal=True)
 AmbientLight(color=(0.5, 0.5, 0.5, 1), eternal=True)
 
 
@@ -54,7 +55,7 @@ def px_to_unit(px):
 
 
 class Thing:
-    def __init__(self, x_coord, y_coord, width, height, color):
+    def __init__(self, x_coord, y_coord, width, height, color, depth=DEPTH):
         self.x_coord = x_coord
         self.y_coord = y_coord
         self.width = width
@@ -93,7 +94,6 @@ class Thing:
     def in_frame(self, visible_bounds):
         """Check if the object is within the visible bounds."""
         visible_left, visible_right, visible_top, visible_bottom = visible_bounds
-        return True
         return (
             self.x_coord + self.width >= visible_left
             and self.x_coord <= visible_right
@@ -122,7 +122,7 @@ class Platform(Thing):
 
 class Ball(Thing):
     def __init__(self, x_coord, y_coord, size, color, speed):
-        super().__init__(x_coord, y_coord, size, size, color)
+        super().__init__(x_coord, y_coord, size, size, color, depth=DEPTH - (DEPTH // 2))
         self.x_speed = speed
         self.y_speed = speed
         self.color_fade_frames_remaining = 0
@@ -160,16 +160,16 @@ class Ball(Thing):
             self.y_coord - offset_y,
         )
         Entity(
-            model="sphere",
+            model="cube",
             position=(
                 px_to_unit(x),
                 px_to_unit(y),
-                0,
+                px_to_unit(self.depth),
             ),
             scale=(
-                px_to_unit(self.width),
-                px_to_unit(self.height),
-                px_to_unit(self.height),
+                px_to_unit(self.current_size),
+                px_to_unit(self.current_size),
+                px_to_unit(self.current_size),
             ),
             color=self.get_color(),
         )
@@ -180,7 +180,7 @@ class Ball(Thing):
                 brighten_color(self.original_color),
                 self.original_color,
                 HIT_ANIMATION_LENGTH,
-                self.color_fade_frames_remaining,
+                self.color_fade_frames_remaining * 2,
             )
             self.color_fade_frames_remaining -= 1
             return faded_color
@@ -430,13 +430,13 @@ class Scene:
             # Horizontal orientation
             if platform_orientation:
                 pwidth, pheight = PLATFORM_HEIGHT, PLATFORM_WIDTH
-                new_platform_x = future_x + pwidth // 2 if self.ball.x_speed > 0 else future_x - pwidth // 2
+                new_platform_x = future_x + pwidth / 2 if self.ball.x_speed > 0 else future_x - pwidth / 2
                 new_platform_y = future_y - pheight if self.ball.y_speed < 0 else future_y + pheight * 2
             # Vertical orientation
             else:
                 pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
                 new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
-                new_platform_y = future_y + pheight // 2 if self.ball.y_speed < 0 else future_y - pheight // 2
+                new_platform_y = future_y + pheight / 2 if self.ball.y_speed < 0 else future_y - pheight / 2
 
             new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
             self.platforms.append(new_platform)

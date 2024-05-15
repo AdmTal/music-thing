@@ -22,6 +22,7 @@ def change_instrument(
     new_instrument=0,
     new_volume=127,
     isolated_tracks=None,
+    sustain_pedal=False,
 ):
     # Load MIDI file
     midi_data = pretty_midi.PrettyMIDI(midi_file_path)
@@ -44,6 +45,17 @@ def change_instrument(
 
         sustain = pretty_midi.ControlChange(number=64, value=1, time=0)
         instrument.control_changes.append(sustain)
+
+        if sustain_pedal:
+            # Sustain ON at the start of the track
+            sustain_on = pretty_midi.ControlChange(number=64, value=127, time=0)
+            instrument.control_changes.append(sustain_on)
+
+            # Optionally, turn off sustain at the end of the track
+            # Find the last note's end time to place sustain off event
+            last_note_end = max(note.end for note in instrument.notes) if instrument.notes else 0
+            sustain_off = pretty_midi.ControlChange(number=64, value=0, time=last_note_end)
+            instrument.control_changes.append(sustain_off)
 
     # Save modified MIDI file
     midi_data.write(output_file_path)

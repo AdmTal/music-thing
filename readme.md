@@ -61,5 +61,7 @@ Options:
   -i, --isolate                  Mute all non animated tracks
   --show_carve                   Generate a Carving Video
   --show_platform                Generate a Platform placement Video
+  -sp, --sustain_pedal           You know, like on a Piano - let the notes
+                                 drag out - make a meal of it
   --help                         Show this message and exit.
 ```

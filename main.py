@@ -534,6 +534,7 @@ class Scene:
         new_instrument,
         isolated_tracks,
         change_colors=False,
+        sustain_pedal=False,
     ):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
@@ -557,6 +558,7 @@ class Scene:
                 FRAME_BUFFER,
                 new_instrument,
                 isolated_tracks,
+                sustain_pedal,
             )
             self.render_full_image().save(f"{vid_name.split('.mp4')[0]}.png")
 
@@ -684,7 +686,14 @@ def parse_animate_tracks(ctx, param, value):
     is_flag=True,
     help="Generate a Platform placement Video",
 )
-def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate):
+@click.option(
+    "--sustain_pedal",
+    "-sp",
+    default=False,
+    is_flag=True,
+    help="You know, like on a Piano - let the notes drag out - make a meal of it",
+)
+def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate, sustain_pedal):
     song_name = midi.split("/")[-1].split(".mid")[0]
     # Inspect the MIDI file to see which video frames line up with the music
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, animate_tracks)
@@ -738,7 +747,16 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tr
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls, carved=True)
-    scene.run_simulation(midi, f"{song_name}", num_frames, True, new_instrument, isolated_tracks, True)
+    scene.run_simulation(
+        midi,
+        f"{song_name}",
+        num_frames,
+        True,
+        new_instrument,
+        isolated_tracks,
+        change_colors=True,
+        sustain_pedal=sustain_pedal,
+    )
 
     cleanup_cache_dir()
 
