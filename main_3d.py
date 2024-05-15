@@ -12,19 +12,19 @@ from src.midi_stuff import (
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir, cleanup_cache_dir
 from src.animation_stuff import animate_throb, lerp
-from src.color_stuff import fade_color, brighten_color
+from src.color_stuff import fade_color, brighten_color, hex_to_rgba
 
 BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
-WALL_COLOR = "#5bb1cd"
+WALL_COLOR = "#3d3f41"
 PADDLE_COLOR = WALL_COLOR
 HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
 
-SCREEN_WIDTH = 624
-SCREEN_HEIGHT = 624 * 2
-DEPTH = 20
-CAM_DEPTH = -15
+SCREEN_WIDTH = 880
+SCREEN_HEIGHT = 1536
+DEPTH = 2
+CAM_DEPTH = -17
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
@@ -39,11 +39,14 @@ FRAME_BUFFER = 15
 
 
 app = Ursina()
-window.color = color.smoke
+window.color = color.rgb32(214, 209, 205)
 window.size = (SCREEN_WIDTH, SCREEN_HEIGHT)
-camera.position = (3.5, 6, CAM_DEPTH)
+camera.position = (5, 10, CAM_DEPTH)
+light = DirectionalLight(direction=(0, -45, -45))
+light.shadows = True  # Enable shadows for the light
+light.shadow_caster = True, 2048, 2048  # Enable this light to cast shadows
+scene.ambient_light = AmbientLight(color=(0.5, 0.5, 0.5, 1))
 PointLight(position=(3.5, 6, CAM_DEPTH * 2), color=color.white, eternal=True)
-AmbientLight(color=(0.5, 0.5, 0.5, 1), eternal=True)
 
 
 class BadSimulation(Exception):
@@ -62,7 +65,7 @@ class Thing:
         self.height = height
         self.color = color
         self.visible = True
-        self.depth = DEPTH
+        self.depth = depth
 
     def get_color(self):
         return self.color
@@ -70,7 +73,7 @@ class Thing:
     def hide(self):
         self.visible = False
 
-    def render(self, offset_x, offset_y, extra_d=0):
+    def render(self, offset_x, offset_y):
         if not self.visible:
             return
 
@@ -86,9 +89,10 @@ class Thing:
             scale=(
                 px_to_unit(self.width),
                 px_to_unit(self.height),
-                self.depth // 10,
+                self.depth,
             ),
-            color=self.color,
+            color=hex_to_rgba(self.color),
+            cast_shadow=True,
         )
 
     def in_frame(self, visible_bounds):
@@ -122,7 +126,7 @@ class Platform(Thing):
 
 class Ball(Thing):
     def __init__(self, x_coord, y_coord, size, color, speed):
-        super().__init__(x_coord, y_coord, size, size, color, depth=DEPTH - (DEPTH // 2))
+        super().__init__(x_coord, y_coord, size, size, color, depth=DEPTH - (DEPTH / 2))
         self.x_speed = speed
         self.y_speed = speed
         self.color_fade_frames_remaining = 0
@@ -171,7 +175,8 @@ class Ball(Thing):
                 px_to_unit(self.current_size),
                 px_to_unit(self.current_size),
             ),
-            color=self.get_color(),
+            color=hex_to_rgba(self.get_color()),
+            cast_shadow=True,
         )
 
     def get_color(self):
@@ -600,6 +605,7 @@ class Scene:
         new_instrument,
         isolated_tracks,
         change_colors=False,
+        sustain_pedal=False,
     ):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
@@ -624,6 +630,7 @@ class Scene:
                 FRAME_BUFFER,
                 new_instrument,
                 isolated_tracks,
+                sustain_pedal,
             )
 
 
@@ -738,7 +745,14 @@ def parse_animate_tracks(ctx, param, value):
     is_flag=True,
     help="Mute all non animated tracks",
 )
-def main(midi, max_frames, new_instrument, animate_tracks, isolate):
+@click.option(
+    "--sustain_pedal",
+    "-sp",
+    default=False,
+    is_flag=True,
+    help="You know, like on a Piano - let the notes drag out - make a meal of it",
+)
+def main(midi, max_frames, new_instrument, animate_tracks, isolate, sustain_pedal):
     song_name = midi.split("/")[-1].split(".mid")[0]
     # Inspect the MIDI file to see which video frames line up with the music
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, animate_tracks)
@@ -792,7 +806,15 @@ def main(midi, max_frames, new_instrument, animate_tracks, isolate):
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls, carved=True)
-    scene.run_simulation(midi, f"{song_name}", num_frames, True, new_instrument, isolated_tracks)
+    scene.run_simulation(
+        midi,
+        f"{song_name}",
+        num_frames,
+        True,
+        new_instrument,
+        isolated_tracks,
+        sustain_pedal=sustain_pedal,
+    )
 
     cleanup_cache_dir()
 

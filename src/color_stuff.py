@@ -1,3 +1,15 @@
+from ursina.color import rgb32
+
+
+def hex_to_rgba(hex_color):
+    # Remove the '#' character if it's present
+    hex_color = hex_color.lstrip("#")
+    # Convert the hexadecimal color to an integer and extract RGB components
+    rgb = tuple(int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
+    # Combine RGB components with the alpha value to create RGBA
+    return rgb32(*(rgb))
+
+
 def brighten_color(hex_color, increase=20):
     # Convert hex to RGB
     r, g, b = int(hex_color[1:3], 16), int(hex_color[3:5], 16), int(hex_color[5:7], 16)
