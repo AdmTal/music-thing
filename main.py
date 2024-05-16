@@ -439,7 +439,7 @@ class Scene:
         )
 
         # Smoothing factor
-        alpha = BALL_SPEED / 100
+        alpha = BALL_SPEED / 250
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, alpha)
@@ -523,6 +523,8 @@ class Scene:
                 fill=platform.get_color(),
             )
 
+        self.ball.render(image, min_x, min_y)
+
         return image
 
     def run_simulation(
@@ -535,13 +537,17 @@ class Scene:
         isolated_tracks,
         change_colors=False,
         sustain_pedal=False,
+        zoomed_out=False,
     ):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
         for _ in range(num_frames):
             self.update(change_colors)
             if save_video:
-                writer.append_data(np.array(self.render()))
+                if zoomed_out:
+                    writer.append_data(np.array(self.render_full_image()))
+                else:
+                    writer.append_data(np.array(self.render()))
             progress = (self.frame_count / num_frames) * 100
             click.echo(f"\r{progress:0.0f}% ({self.frame_count} frames)", nl=False)
 
@@ -693,7 +699,16 @@ def parse_animate_tracks(ctx, param, value):
     is_flag=True,
     help="You know, like on a Piano - let the notes drag out - make a meal of it",
 )
-def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate, sustain_pedal):
+@click.option(
+    "--zoomed_out",
+    "-zo",
+    default=False,
+    is_flag=True,
+    help="Show the entire scene in the video, no zoom",
+)
+def main(
+    midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate, sustain_pedal, zoomed_out
+):
     song_name = midi.split("/")[-1].split(".mid")[0]
     # Inspect the MIDI file to see which video frames line up with the music
     note_frames = get_frames_where_notes_happen(midi, FPS, FRAME_BUFFER, animate_tracks)
@@ -756,6 +771,7 @@ def main(midi, max_frames, new_instrument, show_carve, show_platform, animate_tr
         isolated_tracks,
         change_colors=True,
         sustain_pedal=sustain_pedal,
+        zoomed_out=zoomed_out,
     )
 
     cleanup_cache_dir()

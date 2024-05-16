@@ -63,5 +63,6 @@ Options:
   --show_platform                Generate a Platform placement Video
   -sp, --sustain_pedal           You know, like on a Piano - let the notes
                                  drag out - make a meal of it
+  -zo, --zoomed_out              Show the entire scene in the video, no zoom
   --help                         Show this message and exit.
 ```
