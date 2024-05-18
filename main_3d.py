@@ -11,50 +11,90 @@ from src.midi_stuff import (
 )
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir, cleanup_cache_dir
-from src.animation_stuff import animate_throb, lerp
-from src.color_stuff import fade_color, brighten_color, hex_to_rgba
+from src.animation_stuff import lerp
+from src.color_stuff import hex_to_rgba
 
 BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
-WALL_COLOR = "#3d3f41"
-PADDLE_COLOR = WALL_COLOR
+WALL_COLOR = "#DDDDDD"
+PADDLE_COLOR = "#3d3f41"
 HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
 
-SCREEN_WIDTH = 880
-SCREEN_HEIGHT = 1536
-DEPTH = 2
-CAM_DEPTH = -17
+
+SCREEN_WIDTH = 10
+SCREEN_HEIGHT = 15
+DEPTH = 3
+CAM_DEPTH = -20
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
-BALL_SIZE = 50
+BALL_SIZE = 1
 PLATFORM_HEIGHT = BALL_SIZE * 2
 PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 15
+BALL_SPEED = 0.2
 FPS = 60
 FRAME_BUFFER = 15
 
 
 app = Ursina()
 window.color = color.rgb32(214, 209, 205)
-window.size = (SCREEN_WIDTH, SCREEN_HEIGHT)
+unit_to_px = 60
+window.size = (SCREEN_WIDTH * unit_to_px, SCREEN_HEIGHT * unit_to_px)
 camera.position = (5, 10, CAM_DEPTH)
 light = DirectionalLight(direction=(0, -45, -45))
 light.shadows = True  # Enable shadows for the light
 light.shadow_caster = True, 2048, 2048  # Enable this light to cast shadows
 scene.ambient_light = AmbientLight(color=(0.5, 0.5, 0.5, 1))
-PointLight(position=(3.5, 6, CAM_DEPTH * 2), color=color.white, eternal=True)
+PointLight(position=(3.5, 6, CAM_DEPTH * 5), color=color.white, eternal=True)
+
+
+def create_mesh(vertices, depth, z):
+    num_vertices = len(vertices)
+    vertices3d = [Vec3(v.x, v.y, z) for v in vertices]
+    vertices3d += [Vec3(v.x, v.y, z - depth) for v in vertices]
+
+    triangles = []
+
+    # Front face triangles
+    for i in range(1, num_vertices - 1):
+        triangles.append([0, i, i + 1])
+
+    # Back face triangles
+    offset = num_vertices
+    for i in range(1, num_vertices - 1):
+        triangles.append([offset, offset + i + 1, offset + i])
+
+    # Side triangles
+    for i in range(num_vertices):
+        next_index = (i + 1) % num_vertices
+        triangles.append([i, offset + i, offset + next_index])
+        triangles.append([i, offset + next_index, next_index])
+
+    return Mesh(vertices=vertices3d, triangles=triangles)
+
+
+class CustomWall(Entity):
+    def __init__(self, vertices, z, depth, color):
+        super().__init__(model=create_mesh(vertices, depth, z), color=color)
 
 
 class BadSimulation(Exception):
     pass
 
 
-def px_to_unit(px):
-    return px * 0.011
+def calculate_vertices(x, y, width, height):
+    # Calculate the corners of the rectangle
+    bottom_left = Vec2(x, y)
+    bottom_right = Vec2(x + width, y)
+    top_right = Vec2(x + width, y + height)
+    top_left = Vec2(x, y + height)
+
+    # List of vertices in clockwise order starting from bottom left
+    vertices = [bottom_left, bottom_right, top_right, top_left]
+    return vertices
 
 
 class Thing:
@@ -79,20 +119,12 @@ class Thing:
 
         x, y = (self.x_coord - offset_x, self.y_coord - offset_y)
 
-        Entity(
-            model="cube",
-            position=(
-                px_to_unit(x),
-                px_to_unit(y),
-                0,
-            ),
-            scale=(
-                px_to_unit(self.width),
-                px_to_unit(self.height),
-                self.depth,
-            ),
-            color=hex_to_rgba(self.color),
-            cast_shadow=True,
+        vertices = calculate_vertices(x, y, self.width, self.height)
+        CustomWall(
+            vertices,
+            self.depth,
+            self.depth,
+            hex_to_rgba(self.color),
         )
 
     def in_frame(self, visible_bounds):
@@ -146,49 +178,18 @@ class Ball(Thing):
         self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
 
     def render(self, offset_x, offset_y):
-        # Calculate the size reduction effect
-        if self.size_fade_frames_remaining > 0:
-            throb = animate_throb(
-                -self.size_fade_frames_remaining,
-                peak=HIT_ANIMATION_LENGTH // 2,
-                width=HIT_ANIMATION_LENGTH,
-            )
-            factor = 1 - HIT_SHRINK * (throb / HIT_ANIMATION_LENGTH)
-            self.current_size = int(self.original_size * factor)
-            self.size_fade_frames_remaining -= 1
-        else:
-            self.current_size = self.original_size
+        self.current_size = self.original_size
 
-        x, y = (
-            self.x_coord - offset_x,
-            self.y_coord - offset_y,
-        )
+        x, y = (self.x_coord - offset_x, self.y_coord - offset_y)
         Entity(
             model="cube",
-            position=(
-                px_to_unit(x),
-                px_to_unit(y),
-                px_to_unit(self.depth),
-            ),
-            scale=(
-                px_to_unit(self.current_size),
-                px_to_unit(self.current_size),
-                px_to_unit(self.current_size),
-            ),
+            position=(x, y, self.depth),
+            scale=(self.current_size, self.current_size, self.current_size),
             color=hex_to_rgba(self.get_color()),
             cast_shadow=True,
         )
 
     def get_color(self):
-        if self.color_fade_frames_remaining > 0:
-            faded_color = fade_color(
-                brighten_color(self.original_color),
-                self.original_color,
-                HIT_ANIMATION_LENGTH,
-                self.color_fade_frames_remaining * 2,
-            )
-            self.color_fade_frames_remaining -= 1
-            return faded_color
         return self.original_color
 
     def predict_position(self, frames=1):
@@ -356,72 +357,7 @@ class Scene:
 
     def set_walls(self, walls, carved=False):
         self.carved = carved
-        self.walls = []
-
-        # Function to merge walls horizontally
-        def merge_horizontal(walls):
-            merged = []
-            sorted_walls = sorted(walls, key=lambda w: w.x_coord)
-            start_x = sorted_walls[0].x_coord
-            end_x = start_x + sorted_walls[0].width
-            current_y = sorted_walls[0].y_coord
-            height = sorted_walls[0].height
-
-            for wall in sorted_walls[1:]:
-                if wall.x_coord == end_x:
-                    end_x += wall.width
-                else:
-                    merged.append(Wall(start_x, current_y, end_x - start_x, height, WALL_COLOR))
-                    start_x = wall.x_coord
-                    end_x = start_x + wall.width
-
-            merged.append(Wall(start_x, current_y, end_x - start_x, height, WALL_COLOR))
-            return merged
-
-        # Function to merge walls vertically
-        def merge_vertical(walls):
-            merged = []
-            sorted_walls = sorted(walls, key=lambda w: w.y_coord)
-            start_y = sorted_walls[0].y_coord
-            end_y = start_y + sorted_walls[0].height
-            current_x = sorted_walls[0].x_coord
-            width = sorted_walls[0].width
-
-            for wall in sorted_walls[1:]:
-                if wall.y_coord == end_y:
-                    end_y += wall.height
-                else:
-                    merged.append(Wall(current_x, start_y, width, end_y - start_y, WALL_COLOR))
-                    start_y = wall.y_coord
-                    end_y = start_y + wall.height
-
-            merged.append(Wall(current_x, start_y, width, end_y - start_y, WALL_COLOR))
-            return merged
-
-        # Group walls by their y-coordinates if they share the same height
-        horizontal_groups = {}
-        for wall in walls:
-            key = (wall.y_coord, wall.height)
-            if key not in horizontal_groups:
-                horizontal_groups[key] = []
-            horizontal_groups[key].append(wall)
-
-        # Merge within each horizontal group
-        for group in horizontal_groups.values():
-            self.walls.extend(merge_horizontal(group))
-
-        # Group walls by their x-coordinates if they share the same width
-        vertical_groups = {}
-        for wall in self.walls:
-            key = (wall.x_coord, wall.width)
-            if key not in vertical_groups:
-                vertical_groups[key] = []
-            vertical_groups[key].append(wall)
-
-        # Clear and merge within each vertical group
-        self.walls = []
-        for group in vertical_groups.values():
-            self.walls.extend(merge_vertical(group))
+        self.walls = walls
 
     def update(self, change_colors=False):
         self.frame_count += 1
@@ -429,7 +365,7 @@ class Scene:
         # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
             # A note will play on this frame, so we need to put a Platform where the ball will be next
-            future_x, future_y = self.ball.predict_position(2)
+            future_x, future_y = self.ball.predict_position(1)
 
             platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
@@ -484,14 +420,17 @@ class Scene:
             self.offset_y + (5 * self.screen_height),
         )
 
-        # Only render the ball if it's within the visible area
+        # Only render walls and platforms if they are within the visible area
+        for wall in self.walls:
+            if wall.in_frame(visible_bounds):
+                wall.render(self.offset_x, self.offset_y)
+
+        for platorm in self.platforms:
+            if platorm.in_frame(visible_bounds):
+                platorm.render(self.offset_x, self.offset_y)
+
         if self.ball.in_frame(visible_bounds):
             self.ball.render(self.offset_x, self.offset_y)
-
-        # Only render walls and platforms if they are within the visible area
-        for obj in self.platforms:
-            if obj.in_frame(visible_bounds):
-                obj.render(self.offset_x, self.offset_y)
 
         fname = f"{get_cache_dir()}/frame.jpg"
         base.win.saveScreenshot(fname)
@@ -510,7 +449,7 @@ class Scene:
         )
 
         # Smoothing factor
-        alpha = BALL_SPEED / 100
+        alpha = BALL_SPEED / 5
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, alpha)
@@ -537,6 +476,7 @@ class Scene:
         walls = self.create_squares(list_of_x_coords, list_of_y_coords)
         for x, y, W, H in walls:
             self.walls.append(Wall(x, y, W, H, WALL_COLOR))
+
         # Find the minimum and maximum extents of existing walls
         minX = min(w[0] for w in walls)
         maxX = max(w[0] + w[2] for w in walls)
