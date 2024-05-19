@@ -16,15 +16,27 @@ from src.color_stuff import hex_to_rgba
 
 BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
-WALL_COLOR = "#5c6063"
-PADDLE_COLOR = "#aba429"
+WALL_COLOR = "#3d3f41"
+PADDLE_COLOR = WALL_COLOR
 HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
 
+RAND_COLORS = [
+    "#4CAF50",  # Green
+    "#2196F3",  # Blue
+    "#FFC107",  # Amber
+    "#9C27B0",  # Purple
+    "#E91E63",  # Pink
+    "#FFEB3B",  # Yellow
+    "#00BCD4",  # Cyan
+    "#FF5722",  # Deep Orange
+    "#607D8B",  # Blue Grey
+    "#795548",  # Brown
+]
 
 SCREEN_WIDTH = 9
 SCREEN_HEIGHT = 16
-DEPTH = 3
+DEPTH = 5
 CAM_DEPTH = -35
 
 BALL_START_X = SCREEN_WIDTH // 2
@@ -41,7 +53,7 @@ FRAME_BUFFER = 15
 
 app = Ursina()
 window.color = color.rgb32(214, 209, 205)
-unit_to_px = 60
+unit_to_px = 50
 window.size = (SCREEN_WIDTH * unit_to_px, SCREEN_HEIGHT * unit_to_px)
 camera.position = (BALL_START_X, BALL_START_Y, CAM_DEPTH)
 PointLight(position=(BALL_START_X, BALL_START_Y, 10), color=color.white, shadows=True)
@@ -120,9 +132,9 @@ class Thing:
         vertices = calculate_vertices(x, y, self.width, self.height)
         CustomWall(
             vertices,
-            self.depth,
-            self.depth,
-            hex_to_rgba(self.color),
+            z=self.depth - 2,
+            depth=self.depth,
+            color=hex_to_rgba(self.color),
         )
 
     def in_frame(self, visible_bounds):
@@ -178,13 +190,13 @@ class Ball(Thing):
         x, y = (self.x_coord - offset_x, self.y_coord - offset_y)
         y += self.current_size / 2
         x += self.current_size / 2
-        b = Entity(
+        Entity(
             model="cube",
             position=(x, y, self.depth),
             scale=(self.current_size, self.current_size, self.current_size),
             color=hex_to_rgba(self.get_color()),
         )
-        PointLight(position=b.position, color=color.light_gray, shadows=True)
+        PointLight(position=(x, y, self.depth - 2), color=color.light_gray)
 
     def get_color(self):
         return self.original_color
@@ -287,6 +299,19 @@ class Ball(Thing):
             ):
                 wall.hide()
 
+            if hit_platform:
+                plat_left = platform.x_coord
+                plat_right = platform.x_coord + platform.width
+                plat_top = platform.y_coord
+                plat_bottom = platform.y_coord + platform.height
+                if (
+                    plat_right > wall.x_coord
+                    and plat_left < wall.x_coord + wall.width
+                    and plat_bottom > wall.y_coord
+                    and plat_top < wall.y_coord + wall.height
+                ):
+                    wall.hide()
+
         if is_carving:
             self._update_carve_square()
 
@@ -362,7 +387,7 @@ class Scene:
         # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
             # A note will play on this frame, so we need to put a Platform where the ball will be next
-            future_x, future_y = self.ball.predict_position(1)
+            future_x, future_y = self.ball.predict_position(2)
 
             platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
@@ -374,16 +399,16 @@ class Scene:
             else:
                 pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
                 new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
-                new_platform_y = future_y + pheight / 2 if self.ball.y_speed < 0 else future_y - pheight / 2
+                new_platform_y = future_y + pheight / 2 if self.ball.y_speed > 0 else future_y - pheight / 2
 
             new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
             self.platforms.append(new_platform)
 
         visible_bounds = (
-            self.offset_x - self.screen_width,
-            self.offset_x + (5 * self.screen_width),
-            self.offset_y - self.screen_height,
-            self.offset_y + (5 * self.screen_height),
+            self.offset_x - (3 * self.screen_width),
+            self.offset_x + (3 * self.screen_width),
+            self.offset_y - (3 * self.screen_height),
+            self.offset_y + (3 * self.screen_height),
         )
 
         # Move ball and check for collisions
@@ -396,7 +421,7 @@ class Scene:
         self.adjust_camera()
 
         if change_colors and hit_platform:
-            hit_platform.color = random.choice(list(ImageColor.colormap.keys()))
+            hit_platform.color = random.choice(RAND_COLORS)
 
         if not self._platforms_set:
             return
@@ -446,7 +471,7 @@ class Scene:
         )
 
         # Smoothing factor for position
-        position_alpha = BALL_SPEED / 10
+        position_alpha = BALL_SPEED / 15
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, position_alpha)
@@ -762,6 +787,7 @@ def main(midi, max_frames, new_instrument, animate_tracks, isolate, sustain_peda
         True,
         new_instrument,
         isolated_tracks,
+        change_colors=True,
         sustain_pedal=sustain_pedal,
     )
 
