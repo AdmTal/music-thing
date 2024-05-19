@@ -16,16 +16,16 @@ from src.color_stuff import hex_to_rgba
 
 BG_COLOR = "#d6d1cd"
 BALL_COLOR = "#e0194f"
-WALL_COLOR = "#DDDDDD"
-PADDLE_COLOR = "#3d3f41"
+WALL_COLOR = "#5c6063"
+PADDLE_COLOR = "#aba429"
 HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
 
 
-SCREEN_WIDTH = 10
-SCREEN_HEIGHT = 15
+SCREEN_WIDTH = 9
+SCREEN_HEIGHT = 16
 DEPTH = 3
-CAM_DEPTH = -20
+CAM_DEPTH = -35
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
@@ -34,7 +34,7 @@ BALL_SIZE = 1
 PLATFORM_HEIGHT = BALL_SIZE * 2
 PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 0.2
+BALL_SPEED = 0.25
 FPS = 60
 FRAME_BUFFER = 15
 
@@ -43,12 +43,10 @@ app = Ursina()
 window.color = color.rgb32(214, 209, 205)
 unit_to_px = 60
 window.size = (SCREEN_WIDTH * unit_to_px, SCREEN_HEIGHT * unit_to_px)
-camera.position = (5, 10, CAM_DEPTH)
-light = DirectionalLight(direction=(0, -45, -45))
-light.shadows = True  # Enable shadows for the light
-light.shadow_caster = True, 2048, 2048  # Enable this light to cast shadows
-scene.ambient_light = AmbientLight(color=(0.5, 0.5, 0.5, 1))
-PointLight(position=(3.5, 6, CAM_DEPTH * 5), color=color.white, eternal=True)
+camera.position = (BALL_START_X, BALL_START_Y, CAM_DEPTH)
+PointLight(position=(BALL_START_X, BALL_START_Y, 10), color=color.white, shadows=True)
+PointLight(position=(BALL_START_X, BALL_START_Y, -10), color=color.white, shadows=True)
+scene.ambient_light = color.color(0, 0.1, 0.1, 0.1)
 
 
 def create_mesh(vertices, depth, z):
@@ -87,10 +85,10 @@ class BadSimulation(Exception):
 
 def calculate_vertices(x, y, width, height):
     # Calculate the corners of the rectangle
-    bottom_left = Vec2(x, y)
-    bottom_right = Vec2(x + width, y)
-    top_right = Vec2(x + width, y + height)
-    top_left = Vec2(x, y + height)
+    bottom_left = Vec2(x, y + height)
+    bottom_right = Vec2(x + width, y + height)
+    top_right = Vec2(x + width, y)
+    top_left = Vec2(x, y)
 
     # List of vertices in clockwise order starting from bottom left
     vertices = [bottom_left, bottom_right, top_right, top_left]
@@ -161,8 +159,6 @@ class Ball(Thing):
         super().__init__(x_coord, y_coord, size, size, color, depth=DEPTH - (DEPTH / 2))
         self.x_speed = speed
         self.y_speed = speed
-        self.color_fade_frames_remaining = 0
-        self.size_fade_frames_remaining = 0
         self.original_color = color
         self.original_size = size
         self.current_size = size
@@ -174,20 +170,22 @@ class Ball(Thing):
         self._initialize_carve_square()
 
     def hit(self):
-        self.color_fade_frames_remaining = HIT_ANIMATION_LENGTH // 2
-        self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
+        pass
 
     def render(self, offset_x, offset_y):
         self.current_size = self.original_size
 
         x, y = (self.x_coord - offset_x, self.y_coord - offset_y)
-        Entity(
+        y += self.current_size / 2
+        x += self.current_size / 2
+        b = Entity(
             model="cube",
             position=(x, y, self.depth),
             scale=(self.current_size, self.current_size, self.current_size),
             color=hex_to_rgba(self.get_color()),
             cast_shadow=True,
         )
+        PointLight(position=b.position, color=color.light_gray, shadows=True)
 
     def get_color(self):
         return self.original_color
@@ -414,10 +412,10 @@ class Scene:
 
         # Determine the visible area based on the current offset
         visible_bounds = (
-            self.offset_x - self.screen_width,
-            self.offset_x + (5 * self.screen_width),
-            self.offset_y - self.screen_height,
-            self.offset_y + (5 * self.screen_height),
+            self.offset_x - (3 * self.screen_width),
+            self.offset_x + (3 * self.screen_width),
+            self.offset_y - (3 * self.screen_height),
+            self.offset_y + (3 * self.screen_height),
         )
 
         # Only render walls and platforms if they are within the visible area
@@ -425,9 +423,9 @@ class Scene:
             if wall.in_frame(visible_bounds):
                 wall.render(self.offset_x, self.offset_y)
 
-        for platorm in self.platforms:
-            if platorm.in_frame(visible_bounds):
-                platorm.render(self.offset_x, self.offset_y)
+        for platform in self.platforms:
+            if platform.in_frame(visible_bounds):
+                platform.render(self.offset_x, self.offset_y)
 
         if self.ball.in_frame(visible_bounds):
             self.ball.render(self.offset_x, self.offset_y)
@@ -448,12 +446,24 @@ class Scene:
             self.ball.y_coord - edge_y if self.ball.y_speed < 0 else self.ball.y_coord - (self.screen_height - edge_y)
         )
 
-        # Smoothing factor
-        alpha = BALL_SPEED / 5
+        # Smoothing factor for position
+        position_alpha = BALL_SPEED / 20
 
         # Update camera offsets using linear interpolation for smoother movement
-        self.offset_x = lerp(self.offset_x, desired_offset_x, alpha)
-        self.offset_y = lerp(self.offset_y, desired_offset_y, alpha)
+        self.offset_x = lerp(self.offset_x, desired_offset_x, position_alpha)
+        self.offset_y = lerp(self.offset_y, desired_offset_y, position_alpha)
+
+        # Desired camera rotation based on ball's vertical speed
+        # Tilt down if going up, and tilt up if going down
+        desired_rotation_x = -self.ball.y_speed * 30
+        desired_rotation_y = self.ball.x_speed * 30
+
+        # Smoothing factor for rotation
+        rotation_alpha = position_alpha
+
+        # Update camera rotation using linear interpolation for smoother rotation transition
+        camera.rotation_x = lerp(camera.rotation_x, desired_rotation_x, rotation_alpha)
+        camera.rotation_y = lerp(camera.rotation_y, desired_rotation_y, rotation_alpha)
 
     @staticmethod
     def create_squares(list_of_x_coords, list_of_y_coords):
