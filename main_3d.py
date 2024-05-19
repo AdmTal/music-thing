@@ -183,7 +183,6 @@ class Ball(Thing):
             position=(x, y, self.depth),
             scale=(self.current_size, self.current_size, self.current_size),
             color=hex_to_rgba(self.get_color()),
-            cast_shadow=True,
         )
         PointLight(position=b.position, color=color.light_gray, shadows=True)
 
@@ -447,7 +446,7 @@ class Scene:
         )
 
         # Smoothing factor for position
-        position_alpha = BALL_SPEED / 20
+        position_alpha = BALL_SPEED / 10
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, position_alpha)
