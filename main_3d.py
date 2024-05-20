@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageColor
+from PIL import Image, ImageDraw
 import click
 import imageio
 import numpy as np
@@ -11,7 +11,7 @@ from src.midi_stuff import (
 )
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir, cleanup_cache_dir
-from src.animation_stuff import lerp
+from src.animation_stuff import lerp, animate_throb
 from src.color_stuff import hex_to_rgba
 
 BG_COLOR = "#d6d1cd"
@@ -42,23 +42,69 @@ CAM_DEPTH = -35
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
+UNIT_TO_PX = 55
 BALL_SIZE = 1
 PLATFORM_HEIGHT = BALL_SIZE * 2
 PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 0.25
+BALL_SPEED = 0.3
 FPS = 60
 FRAME_BUFFER = 15
 
 
 app = Ursina()
+
 window.color = color.rgb32(214, 209, 205)
-unit_to_px = 50
-window.size = (SCREEN_WIDTH * unit_to_px, SCREEN_HEIGHT * unit_to_px)
+window.size = (SCREEN_WIDTH * UNIT_TO_PX, SCREEN_HEIGHT * UNIT_TO_PX)
 camera.position = (BALL_START_X, BALL_START_Y, CAM_DEPTH)
-PointLight(position=(BALL_START_X, BALL_START_Y, 10), color=color.white, shadows=True)
-PointLight(position=(BALL_START_X, BALL_START_Y, -10), color=color.white, shadows=True)
+
 scene.ambient_light = color.color(0, 0.1, 0.1, 0.1)
+
+
+def merge_rectangles(rectangles):
+    def merged(a, b):
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+
+        # Merging conditions, ensuring exact alignment
+        if ax == bx and aw == bw:  # Same width and aligned horizontally
+            if ay + ah == by:  # a is directly above b
+                return ax, ay, aw, ah + bh
+            if by + bh == ay:  # b is directly above a
+                return ax, by, aw, ah + bh
+        if ay == by and ah == bh:  # Same height and aligned vertically
+            if ax + aw == bx:  # a is directly left of b
+                return ax, ay, aw + bw, ah
+            if bx + bw == ax:  # b is directly left of a
+                return bx, by, aw + bw, ah
+
+        return None
+
+    changed = True
+    while changed:
+        changed = False
+        new_rectangles = []
+        while rectangles:
+            rect = rectangles.pop(0)
+            merged_any = False
+            i = 0
+            while i < len(rectangles):
+                result = merged(rect, rectangles[i])
+                if result:
+                    rect = result  # Update rect to the merged result
+                    rectangles.pop(i)  # Remove the merged rectangle
+                    merged_any = True
+                else:
+                    i += 1
+            if merged_any:
+                rectangles.append(rect)  # Add the updated rect back for further merging
+                changed = True
+            else:
+                new_rectangles.append(rect)  # No merge, this rect is final for this pass
+
+        rectangles = new_rectangles  # Update list for the next pass if needed
+
+    return rectangles
 
 
 def create_mesh(vertices, depth, z):
@@ -132,7 +178,7 @@ class Thing:
         vertices = calculate_vertices(x, y, self.width, self.height)
         CustomWall(
             vertices,
-            z=self.depth - 2,
+            z=self.depth - 1,
             depth=self.depth,
             color=hex_to_rgba(self.color),
         )
@@ -174,6 +220,7 @@ class Ball(Thing):
         self.original_color = color
         self.original_size = size
         self.current_size = size
+        self.size_fade_frames_remaining = 0
 
         self._carve_top_left_corner = None
         self._carve_top_right_corner = None
@@ -182,10 +229,20 @@ class Ball(Thing):
         self._initialize_carve_square()
 
     def hit(self):
-        pass
+        self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
 
     def render(self, offset_x, offset_y):
-        self.current_size = self.original_size
+        if self.size_fade_frames_remaining > 0:
+            throb = animate_throb(
+                -self.size_fade_frames_remaining,
+                peak=HIT_ANIMATION_LENGTH // 2,
+                width=HIT_ANIMATION_LENGTH,
+            )
+            factor = 1 - HIT_SHRINK * (throb / HIT_ANIMATION_LENGTH)
+            self.current_size = self.original_size * factor
+            self.size_fade_frames_remaining -= 1
+        else:
+            self.current_size = self.original_size
 
         x, y = (self.x_coord - offset_x, self.y_coord - offset_y)
         y += self.current_size / 2
@@ -196,7 +253,9 @@ class Ball(Thing):
             scale=(self.current_size, self.current_size, self.current_size),
             color=hex_to_rgba(self.get_color()),
         )
-        PointLight(position=(x, y, self.depth - 2), color=color.light_gray)
+        PointLight(position=(x, y, self.depth), color=color.white)
+        PointLight(position=(BALL_START_X - offset_x, BALL_START_Y - offset_y, self.depth), color=color.white)
+        PointLight(position=(BALL_START_X - offset_x, BALL_START_Y - offset_y, -self.depth), color=color.white)
 
     def get_color(self):
         return self.original_color
@@ -249,25 +308,13 @@ class Ball(Thing):
 
                 # Adjust ball's speed and position based on the minimal overlap side
                 if min_overlap == overlap_left:
-                    # Reverse horizontal speed
                     self.x_speed = -abs(self.x_speed)
-                    # Reposition to the left of the platform
-                    self.x_coord = plat_left - self.width
                 elif min_overlap == overlap_right:
-                    # Maintain horizontal speed
                     self.x_speed = abs(self.x_speed)
-                    # Reposition to the right of the platform
-                    self.x_coord = plat_right
                 elif min_overlap == overlap_top:
-                    # Reverse vertical speed
                     self.y_speed = -abs(self.y_speed)
-                    # Reposition above the platform
-                    self.y_coord = plat_top - self.height
                 elif min_overlap == overlap_bottom:
-                    # Maintain vertical speed
                     self.y_speed = abs(self.y_speed)
-                    # Reposition below the platform
-                    self.y_coord = plat_bottom
 
                 platform.set_expected_bounce_frame(frame)
                 hit_platform = platform
@@ -361,6 +408,7 @@ class Scene:
     ):
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self._platform_expectations = {}
         self.ball = ball
         self.platforms = []
         self.bounce_frames = bounce_frames
@@ -379,6 +427,24 @@ class Scene:
 
     def set_walls(self, walls, carved=False):
         self.carved = carved
+
+        if carved:
+            rects = [(wall.x_coord, wall.y_coord, wall.width, wall.height) for wall in walls]
+            num_rects = len(rects)
+            merged_rects = merge_rectangles(rects)
+            walls = []
+            print(f"{num_rects} walls merged into {len(merged_rects)}")
+            for merged_rect in merged_rects:
+                walls.append(
+                    Wall(
+                        merged_rect[0],
+                        merged_rect[1],
+                        merged_rect[2],
+                        merged_rect[3],
+                        WALL_COLOR,
+                    )
+                )
+
         self.walls = walls
 
     def update(self, change_colors=False):
@@ -387,19 +453,19 @@ class Scene:
         # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
             # A note will play on this frame, so we need to put a Platform where the ball will be next
-            future_x, future_y = self.ball.predict_position(2)
+            future_x, future_y = self.ball.predict_position(1)
 
             platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
             if platform_orientation:
                 pwidth, pheight = PLATFORM_HEIGHT, PLATFORM_WIDTH
-                new_platform_x = future_x + pwidth / 2 if self.ball.x_speed > 0 else future_x - pwidth / 2
+                new_platform_x = future_x + pwidth // 2 if self.ball.x_speed > 0 else future_x - pwidth // 2
                 new_platform_y = future_y - pheight if self.ball.y_speed < 0 else future_y + pheight * 2
             # Vertical orientation
             else:
                 pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
                 new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
-                new_platform_y = future_y + pheight / 2 if self.ball.y_speed > 0 else future_y - pheight / 2
+                new_platform_y = future_y + pheight // 2 if self.ball.y_speed > 0 else future_y - pheight // 2
 
             new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
             self.platforms.append(new_platform)
@@ -471,7 +537,7 @@ class Scene:
         )
 
         # Smoothing factor for position
-        position_alpha = BALL_SPEED / 15
+        position_alpha = BALL_SPEED / 24
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, position_alpha)
@@ -583,13 +649,19 @@ class Scene:
     ):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
-        for _ in range(num_frames):
-            self.update(change_colors)
-            if save_video:
-                app.step()
-                writer.append_data(np.array(self.render()))
-            progress = (self.frame_count / num_frames) * 100
-            click.echo(f"\r{progress:0.0f}% ({self.frame_count} frames)", nl=False)
+        try:
+            for _ in range(num_frames):
+                self.update(change_colors)
+                if save_video:
+                    app.step()
+                    writer.append_data(np.array(self.render()))
+                progress = (self.frame_count / num_frames) * 100
+                click.echo(f"\r{progress:0.0f}% ({self.frame_count} frames)", nl=False)
+        except KeyboardInterrupt:
+            if not save_video:
+                cleanup_cache_dir()
+                exit()
+            click.echo("\nSave video so far...")
 
         if save_video:
             click.echo(f"\nGenerating the {filename} video...")
@@ -779,6 +851,7 @@ def main(midi, max_frames, new_instrument, animate_tracks, isolate, sustain_peda
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
+    carved_walls = [wall for wall in carved_walls if wall.visible]
     scene.set_walls(carved_walls, carved=True)
     scene.run_simulation(
         midi,
