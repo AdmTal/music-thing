@@ -34,20 +34,21 @@ RAND_COLORS = [
     "#795548",  # Brown
 ]
 
-SCREEN_WIDTH = 9
-SCREEN_HEIGHT = 16
-DEPTH = 5
-CAM_DEPTH = -35
+SCREEN_WIDTH = 8
+SCREEN_HEIGHT = 15
+DEPTH = 4
+CAM_DEPTH = -30
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
-UNIT_TO_PX = 55
+UNIT_TO_PX = 60
 BALL_SIZE = 1
 PLATFORM_HEIGHT = BALL_SIZE * 2
 PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 0.3
+BALL_SPEED = 0.2
+ALPHA = BALL_SPEED / 15
 FPS = 60
 FRAME_BUFFER = 15
 
@@ -248,7 +249,7 @@ class Ball(Thing):
         y += self.current_size / 2
         x += self.current_size / 2
         Entity(
-            model="cube",
+            model="sphere",
             position=(x, y, self.depth),
             scale=(self.current_size, self.current_size, self.current_size),
             color=hex_to_rgba(self.get_color()),
@@ -347,10 +348,10 @@ class Ball(Thing):
                 wall.hide()
 
             if hit_platform:
-                plat_left = platform.x_coord
-                plat_right = platform.x_coord + platform.width
-                plat_top = platform.y_coord
-                plat_bottom = platform.y_coord + platform.height
+                plat_left = hit_platform.x_coord
+                plat_right = hit_platform.x_coord + hit_platform.width
+                plat_top = hit_platform.y_coord
+                plat_bottom = hit_platform.y_coord + hit_platform.height
                 if (
                     plat_right > wall.x_coord
                     and plat_left < wall.x_coord + wall.width
@@ -453,19 +454,19 @@ class Scene:
         # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
             # A note will play on this frame, so we need to put a Platform where the ball will be next
-            future_x, future_y = self.ball.predict_position(1)
+            future_x, future_y = self.ball.predict_position(2)
 
             platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
             if platform_orientation:
                 pwidth, pheight = PLATFORM_HEIGHT, PLATFORM_WIDTH
-                new_platform_x = future_x + pwidth // 2 if self.ball.x_speed > 0 else future_x - pwidth // 2
+                new_platform_x = future_x + pwidth / 2 if self.ball.x_speed > 0 else future_x - pwidth / 2
                 new_platform_y = future_y - pheight if self.ball.y_speed < 0 else future_y + pheight * 2
             # Vertical orientation
             else:
                 pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
                 new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
-                new_platform_y = future_y + pheight // 2 if self.ball.y_speed > 0 else future_y - pheight // 2
+                new_platform_y = future_y + pheight / 2 if self.ball.y_speed > 0 else future_y - pheight / 2
 
             new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
             self.platforms.append(new_platform)
@@ -537,7 +538,7 @@ class Scene:
         )
 
         # Smoothing factor for position
-        position_alpha = BALL_SPEED / 24
+        position_alpha = ALPHA
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, position_alpha)
