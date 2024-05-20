@@ -545,8 +545,8 @@ class Scene:
 
         # Desired camera rotation based on ball's vertical speed
         # Tilt down if going up, and tilt up if going down
-        desired_rotation_x = -self.ball.y_speed * 30
-        desired_rotation_y = self.ball.x_speed * 30
+        desired_rotation_x = -self.ball.y_speed * 45
+        desired_rotation_y = self.ball.x_speed * 45
 
         # Smoothing factor for rotation
         rotation_alpha = position_alpha
