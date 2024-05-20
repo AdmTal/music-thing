@@ -6,6 +6,10 @@ However - the code in this repo takes a MIDI file, and creates a video like this
 
 https://github.com/AdmTal/music-thing/assets/3382568/470d4db7-dd4b-4761-85f7-bf967de41600
 
+Oh - also the same but in 3d 🤩
+
+https://github.com/AdmTal/music-thing/assets/3382568/a315c1cd-8885-4f54-b444-f2e837b5484e
+
 I later found the project I've been replicating - It's amazing you should check that out if you're interested: https://github.com/quasar098/midi-playground
 
 # Repo Quality
