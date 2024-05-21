@@ -37,17 +37,17 @@ RAND_COLORS = [
 SCREEN_WIDTH = 8
 SCREEN_HEIGHT = 15
 DEPTH = 2
-CAM_DEPTH = -20
+CAM_DEPTH = -23
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
 UNIT_TO_PX = 60
 BALL_SIZE = 1
-PLATFORM_HEIGHT = BALL_SIZE
-PLATFORM_WIDTH = BALL_SIZE / 2
+PLATFORM_HEIGHT = BALL_SIZE * 2
+PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 0.2
+BALL_SPEED = 0.25
 ALPHA = BALL_SPEED / 8
 FPS = 60
 FRAME_BUFFER = 15
@@ -155,7 +155,7 @@ def calculate_vertices(x, y, width, height):
 
 
 class Thing:
-    def __init__(self, x_coord, y_coord, width, height, color, depth=DEPTH):
+    def __init__(self, x_coord, y_coord, width, height, color, depth=DEPTH, index=0):
         self.x_coord = x_coord
         self.y_coord = y_coord
         self.width = width
@@ -163,9 +163,15 @@ class Thing:
         self.color = color
         self.visible = True
         self.depth = depth
+        self.index = index
+        self.color_changed = False
 
     def get_color(self):
         return self.color
+
+    def set_color(self, color):
+        self.color = color
+        self.color_changed = True
 
     def hide(self):
         self.visible = False
@@ -176,13 +182,17 @@ class Thing:
 
         x, y = (self.x_coord - offset_x, self.y_coord - offset_y)
 
+        z_fight = 0.001 * float(self.index)
+
         vertices = calculate_vertices(x, y, self.width, self.height)
         CustomWall(
             vertices,
-            z=self.depth - 1,
+            z=self.depth - 1 - z_fight,
             depth=self.depth,
             color=hex_to_rgba(self.color),
         )
+        if self.color_changed:
+            PointLight(position=(x, y, self.depth + 5), color=color.white)
 
     def in_frame(self, visible_bounds):
         """Check if the object is within the visible bounds."""
@@ -200,9 +210,10 @@ class Wall(Thing):
 
 
 class Platform(Thing):
-    def __init__(self, x_coord, y_coord, width, height, color):
-        super().__init__(x_coord, y_coord, width, height, color)
+    def __init__(self, x_coord, y_coord, width, height, color, orientation, index):
+        super().__init__(x_coord, y_coord, width, height, color, index=index)
         self._expected_bounce_frame = None
+        self.orientation = orientation
 
     def set_expected_bounce_frame(self, frame):
         if self._expected_bounce_frame:
@@ -236,8 +247,8 @@ class Ball(Thing):
         if self.size_fade_frames_remaining > 0:
             throb = animate_throb(
                 -self.size_fade_frames_remaining,
-                peak=HIT_ANIMATION_LENGTH // 2,
-                width=HIT_ANIMATION_LENGTH,
+                peak=HIT_ANIMATION_LENGTH / 2,
+                width=HIT_ANIMATION_LENGTH * 2,
             )
             factor = 1 - HIT_SHRINK * (throb / HIT_ANIMATION_LENGTH)
             self.current_size = self.original_size * factor
@@ -249,13 +260,14 @@ class Ball(Thing):
         y += self.current_size / 2
         x += self.current_size / 2
         Entity(
-            model="sphere",
+            model="cube",
             position=(x, y, self.depth),
             scale=(self.current_size, self.current_size, self.current_size),
             color=hex_to_rgba(self.get_color()),
         )
         PointLight(position=(x, y, self.depth), color=color.white)
         PointLight(position=(BALL_START_X - offset_x, BALL_START_Y - offset_y, self.depth), color=color.white)
+        PointLight(position=(BALL_START_X - offset_x, BALL_START_Y - offset_y, self.depth - 5), color=color.white)
         PointLight(position=(BALL_START_X - offset_x, BALL_START_Y - offset_y, -self.depth), color=color.white)
 
     def get_color(self):
@@ -273,49 +285,39 @@ class Ball(Thing):
         hit_platform = None
         is_carving = len(walls) > 0
 
-        # Check each platform for a possible collision
         for platform in platforms:
             if not platform.in_frame(visible_bounds):
                 continue
-            # Define the bounds of the ball at its next position
+            # Collision detection remains the same
             ball_left = next_x
             ball_right = next_x + self.width
             ball_top = next_y
             ball_bottom = next_y + self.height
 
-            # Define the bounds of the current platform
             plat_left = platform.x_coord
             plat_right = platform.x_coord + platform.width
             plat_top = platform.y_coord
             plat_bottom = platform.y_coord + platform.height
 
-            # Check if the ball's next position overlaps with the platform
-            if all(
-                [
-                    ball_right >= plat_left,
-                    ball_left <= plat_right,
-                    ball_bottom >= plat_top,
-                    ball_top <= plat_bottom,
-                ]
+            if (
+                ball_right >= plat_left
+                and ball_left <= plat_right
+                and ball_bottom >= plat_top
+                and ball_top <= plat_bottom
             ):
-                # Calculate the overlap on each side
                 overlap_left = ball_right - plat_left
                 overlap_right = plat_right - ball_left
                 overlap_top = ball_bottom - plat_top
                 overlap_bottom = plat_bottom - ball_top
 
-                # Determine the smallest overlap to resolve the collision minimally
                 min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
 
-                # Adjust ball's speed and position based on the minimal overlap side
-                if min_overlap == overlap_left:
-                    self.x_speed = -abs(self.x_speed)
-                elif min_overlap == overlap_right:
-                    self.x_speed = abs(self.x_speed)
-                elif min_overlap == overlap_top:
-                    self.y_speed = -abs(self.y_speed)
-                elif min_overlap == overlap_bottom:
-                    self.y_speed = abs(self.y_speed)
+                if platform.orientation:
+                    if min_overlap == overlap_top or min_overlap == overlap_bottom:
+                        self.y_speed = -self.y_speed
+                else:
+                    if min_overlap == overlap_left or min_overlap == overlap_right:
+                        self.x_speed = -self.x_speed
 
                 platform.set_expected_bounce_frame(frame)
                 hit_platform = platform
@@ -434,7 +436,7 @@ class Scene:
             num_rects = len(rects)
             merged_rects = merge_rectangles(rects)
             walls = []
-            print(f"{num_rects} walls merged into {len(merged_rects)}")
+            click.echo(f"\n{num_rects} walls merged into {len(merged_rects)}")
             for merged_rect in merged_rects:
                 walls.append(
                     Wall(
@@ -468,7 +470,10 @@ class Scene:
                 new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
                 new_platform_y = future_y + pheight / 2 if self.ball.y_speed > 0 else future_y - pheight / 2
 
-            new_platform = Platform(new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR)
+            p_index = len(self.platforms)
+            new_platform = Platform(
+                new_platform_x, new_platform_y, pwidth, pheight, PADDLE_COLOR, platform_orientation, p_index
+            )
             self.platforms.append(new_platform)
 
         visible_bounds = (
@@ -488,7 +493,7 @@ class Scene:
         self.adjust_camera()
 
         if change_colors and hit_platform:
-            hit_platform.color = random.choice(RAND_COLORS)
+            hit_platform.set_color(random.choice(RAND_COLORS))
 
         if not self._platforms_set:
             return
@@ -546,8 +551,8 @@ class Scene:
 
         # Desired camera rotation based on ball's vertical speed
         # Tilt down if going up, and tilt up if going down
-        desired_rotation_x = -self.ball.y_speed * 45
-        desired_rotation_y = self.ball.x_speed * 45
+        desired_rotation_x = -self.ball.y_speed * 30
+        desired_rotation_y = self.ball.x_speed * 30
 
         # Update camera rotation using linear interpolation for smoother rotation transition
         camera.rotation_x = lerp(camera.rotation_x, desired_rotation_x, position_alpha)
