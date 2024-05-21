@@ -47,7 +47,7 @@ BALL_SIZE = 1
 PLATFORM_HEIGHT = BALL_SIZE * 2
 PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 0.25
+BALL_SPEED = 0.2
 ALPHA = BALL_SPEED / 8
 FPS = 60
 FRAME_BUFFER = 15
@@ -192,7 +192,7 @@ class Thing:
             color=hex_to_rgba(self.color),
         )
         if self.color_changed:
-            PointLight(position=(x, y, self.depth + 5), color=color.white)
+            PointLight(position=(x, y, self.depth - 0.5), color=color.white)
 
     def in_frame(self, visible_bounds):
         """Check if the object is within the visible bounds."""
@@ -456,18 +456,18 @@ class Scene:
         # When the platforms were not set, we are creating them
         if not self._platforms_set and self.frame_count in self.bounce_frames:
             # A note will play on this frame, so we need to put a Platform where the ball will be next
-            future_x, future_y = self.ball.predict_position(2)
+            future_x, future_y = self.ball.predict_position(1)
 
             platform_orientation = self._platform_orientations.get(self.frame_count, False)
             # Horizontal orientation
             if platform_orientation:
                 pwidth, pheight = PLATFORM_HEIGHT, PLATFORM_WIDTH
                 new_platform_x = future_x + pwidth / 2 if self.ball.x_speed > 0 else future_x - pwidth / 2
-                new_platform_y = future_y - pheight if self.ball.y_speed < 0 else future_y + pheight * 2
+                new_platform_y = future_y - pheight * 2 if self.ball.y_speed < 0 else future_y + pheight * 2
             # Vertical orientation
             else:
                 pwidth, pheight = PLATFORM_WIDTH, PLATFORM_HEIGHT
-                new_platform_x = future_x - pwidth if self.ball.x_speed < 0 else future_x + pwidth
+                new_platform_x = future_x - pwidth * 2 if self.ball.x_speed < 0 else future_x + pwidth * 2
                 new_platform_y = future_y + pheight / 2 if self.ball.y_speed > 0 else future_y - pheight / 2
 
             p_index = len(self.platforms)
