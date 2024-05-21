@@ -36,19 +36,19 @@ RAND_COLORS = [
 
 SCREEN_WIDTH = 8
 SCREEN_HEIGHT = 15
-DEPTH = 4
-CAM_DEPTH = -30
+DEPTH = 2
+CAM_DEPTH = -20
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
 UNIT_TO_PX = 60
 BALL_SIZE = 1
-PLATFORM_HEIGHT = BALL_SIZE * 2
-PLATFORM_WIDTH = BALL_SIZE
+PLATFORM_HEIGHT = BALL_SIZE
+PLATFORM_WIDTH = BALL_SIZE / 2
 
 BALL_SPEED = 0.2
-ALPHA = BALL_SPEED / 15
+ALPHA = BALL_SPEED / 8
 FPS = 60
 FRAME_BUFFER = 15
 
@@ -549,12 +549,9 @@ class Scene:
         desired_rotation_x = -self.ball.y_speed * 45
         desired_rotation_y = self.ball.x_speed * 45
 
-        # Smoothing factor for rotation
-        rotation_alpha = position_alpha
-
         # Update camera rotation using linear interpolation for smoother rotation transition
-        camera.rotation_x = lerp(camera.rotation_x, desired_rotation_x, rotation_alpha)
-        camera.rotation_y = lerp(camera.rotation_y, desired_rotation_y, rotation_alpha)
+        camera.rotation_x = lerp(camera.rotation_x, desired_rotation_x, position_alpha)
+        camera.rotation_y = lerp(camera.rotation_y, desired_rotation_y, position_alpha)
 
     @staticmethod
     def create_squares(list_of_x_coords, list_of_y_coords):
