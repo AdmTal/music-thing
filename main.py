@@ -20,6 +20,18 @@ PADDLE_COLOR = WALL_COLOR
 HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
 
+RAND_COLORS = [
+    "#4CAF50",  # Green
+    "#2196F3",  # Blue
+    "#FFC107",  # Amber
+    "#9C27B0",  # Purple
+    "#E91E63",  # Pink
+    "#FFEB3B",  # Yellow
+    "#00BCD4",  # Cyan
+    "#FF5722",  # Deep Orange
+    "#607D8B",  # Blue Grey
+    "#795548",  # Brown
+]
 
 SCREEN_WIDTH = 880
 SCREEN_HEIGHT = 1536
@@ -387,7 +399,7 @@ class Scene:
         self.adjust_camera()
 
         if change_colors and hit_platform:
-            hit_platform.color = random.choice(list(ImageColor.colormap.keys()))
+            hit_platform.color = random.choice(RAND_COLORS)
 
         if not self._platforms_set:
             return
@@ -618,10 +630,17 @@ def get_valid_platform_choices(note_frames: set, boolean_choice_list: list = [])
         # Prune the search tree here
         return None
 
-    # There is opportunity here to add spice and bias the search to produce more interesting scenes
-    next_choices = [True, False]
-    if random.choice([True, False]):
-        next_choices = next_choices[::-1]
+    # STRATEGY - CYCLE
+    if boolean_choice_list[-1]:
+        next_choices = [False, True]
+    else:
+        next_choices = [True, False]
+
+    # STRATEGY - RANDOM
+    # next_choices = [True, False]
+    # if random.choice([True, False]):
+    #     next_choices = next_choices[::-1]
+
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
             note_frames,

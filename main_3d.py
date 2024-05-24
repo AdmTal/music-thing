@@ -431,24 +431,25 @@ class Scene:
     def set_walls(self, walls, carved=False):
         self.carved = carved
 
-        if carved:
-            rects = [(wall.x_coord, wall.y_coord, wall.width, wall.height) for wall in walls]
-            num_rects = len(rects)
-            merged_rects = merge_rectangles(rects)
-            walls = []
-            click.echo(f"\n{num_rects} walls merged into {len(merged_rects)}")
-            for merged_rect in merged_rects:
-                walls.append(
-                    Wall(
-                        merged_rect[0],
-                        merged_rect[1],
-                        merged_rect[2],
-                        merged_rect[3],
-                        WALL_COLOR,
-                    )
-                )
+        if not carved:
+            self.walls = walls
+            return
 
-        self.walls = walls
+        rects = [(wall.x_coord, wall.y_coord, wall.width, wall.height) for wall in walls]
+        num_rects = len(rects)
+        merged_rects = merge_rectangles(rects)
+        self.walls = []
+        click.echo(f"\n{num_rects} walls merged into {len(merged_rects)}")
+        for merged_rect in merged_rects:
+            self.walls.append(
+                Wall(
+                    merged_rect[0],
+                    merged_rect[1],
+                    merged_rect[2],
+                    merged_rect[3],
+                    WALL_COLOR,
+                )
+            )
 
     def update(self, change_colors=False):
         self.frame_count += 1
@@ -732,10 +733,17 @@ def get_valid_platform_choices(note_frames: set, boolean_choice_list: list = [])
         # Prune the search tree here
         return None
 
-    # There is opportunity here to add spice and bias the search to produce more interesting scenes
-    next_choices = [True, False]
-    if random.choice([True, False]):
-        next_choices = next_choices[::-1]
+    # STRATEGY - CYCLE
+    if boolean_choice_list[-1]:
+        next_choices = [False, True]
+    else:
+        next_choices = [True, False]
+
+    # STRATEGY - RANDOM
+    # next_choices = [True, False]
+    # if random.choice([True, False]):
+    #     next_choices = next_choices[::-1]
+
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
             note_frames,
