@@ -1,4 +1,4 @@
-from PIL import Image, ImageDraw, ImageColor
+from PIL import Image, ImageDraw
 import click
 import imageio
 import numpy as np
@@ -46,6 +46,9 @@ PLATFORM_WIDTH = BALL_SIZE // 3
 BALL_SPEED = 10
 FPS = 60
 FRAME_BUFFER = 15
+
+STRATEGY_RANDOM = "random"
+STRATEGY_ALTERNATE = "alternate"
 
 
 class BadSimulation(Exception):
@@ -608,7 +611,7 @@ def choices_are_valid(note_frames, boolean_choice_list):
     return True
 
 
-def get_valid_platform_choices(note_frames: set, boolean_choice_list: list = []):
+def get_valid_platform_choices(strategy, note_frames: set, boolean_choice_list: list = []):
     if not boolean_choice_list:
         boolean_choice_list.append(random.choice([True, False]))
 
@@ -630,19 +633,19 @@ def get_valid_platform_choices(note_frames: set, boolean_choice_list: list = [])
         # Prune the search tree here
         return None
 
-    # STRATEGY - CYCLE
-    if boolean_choice_list[-1]:
-        next_choices = [False, True]
-    else:
+    if strategy == STRATEGY_ALTERNATE:
+        if boolean_choice_list[-1]:
+            next_choices = [False, True]
+        else:
+            next_choices = [True, False]
+    elif strategy == STRATEGY_RANDOM:
         next_choices = [True, False]
-
-    # STRATEGY - RANDOM
-    # next_choices = [True, False]
-    # if random.choice([True, False]):
-    #     next_choices = next_choices[::-1]
+        if random.choice([True, False]):
+            next_choices = next_choices[::-1]
 
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
+            strategy,
             note_frames,
             boolean_choice_list + [rand_choice],
         )
@@ -725,8 +728,23 @@ def parse_animate_tracks(ctx, param, value):
     is_flag=True,
     help="Show the entire scene in the video, no zoom",
 )
+@click.option(
+    "--strategy",
+    "-s",
+    default=STRATEGY_RANDOM,
+    help="Show the entire scene in the video, no zoom",
+)
 def main(
-    midi, max_frames, new_instrument, show_carve, show_platform, animate_tracks, isolate, sustain_pedal, zoomed_out
+    midi,
+    max_frames,
+    new_instrument,
+    show_carve,
+    show_platform,
+    animate_tracks,
+    isolate,
+    sustain_pedal,
+    zoomed_out,
+    strategy,
 ):
     song_name = midi.split("/")[-1].split(".mid")[0]
     # Inspect the MIDI file to see which video frames line up with the music
@@ -742,7 +760,7 @@ def main(
     # Run the backtracking alg to figure out where to place the platforms
     num_platforms = len(note_frames)
     click.echo(f"Searching for valid placement for {num_platforms} platforms...")
-    boolean_choice_list = get_valid_platform_choices(note_frames)
+    boolean_choice_list = get_valid_platform_choices(strategy, note_frames)
     if not boolean_choice_list:
         click.echo("\nCould not figure out platforms :(")
         click.echo("\nTry changing ball and platform size, and speed")

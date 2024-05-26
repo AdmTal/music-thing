@@ -43,7 +43,7 @@ BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
 UNIT_TO_PX = 60
-BALL_SIZE = 1
+BALL_SIZE = .75
 PLATFORM_HEIGHT = BALL_SIZE * 2
 PLATFORM_WIDTH = BALL_SIZE
 
@@ -437,6 +437,7 @@ class Scene:
 
         rects = [(wall.x_coord, wall.y_coord, wall.width, wall.height) for wall in walls]
         num_rects = len(rects)
+        click.echo(f"\nMerging walls ...")
         merged_rects = merge_rectangles(rects)
         self.walls = []
         click.echo(f"\n{num_rects} walls merged into {len(merged_rects)}")
@@ -734,15 +735,15 @@ def get_valid_platform_choices(note_frames: set, boolean_choice_list: list = [])
         return None
 
     # STRATEGY - CYCLE
-    if boolean_choice_list[-1]:
-        next_choices = [False, True]
-    else:
-        next_choices = [True, False]
+    # if boolean_choice_list[-1]:
+    #     next_choices = [False, True]
+    # else:
+    #     next_choices = [True, False]
 
     # STRATEGY - RANDOM
-    # next_choices = [True, False]
-    # if random.choice([True, False]):
-    #     next_choices = next_choices[::-1]
+    next_choices = [True, False]
+    if random.choice([True, False]):
+        next_choices = next_choices[::-1]
 
     for rand_choice in next_choices:
         result = get_valid_platform_choices(
@@ -858,11 +859,11 @@ def main(midi, max_frames, new_instrument, animate_tracks, isolate, sustain_peda
 
     # Run the final simulation with the platforms and carved walls in place
     carved_walls = scene.walls
-    click.echo(f"\nRunning the simulation again to make the video...")
     ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     carved_walls = [wall for wall in carved_walls if wall.visible]
+    click.echo(f"\nRunning the simulation again to make the video...")
     scene.set_walls(carved_walls, carved=True)
     scene.run_simulation(
         midi,
