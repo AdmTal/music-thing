@@ -49,12 +49,21 @@ BALL_SPEED = 10
 FPS = 60
 FRAME_BUFFER = 15
 
+BUMP_DIST = BALL_SPEED
+
 STRATEGY_RANDOM = "random"
 STRATEGY_ALTERNATE = "alternate"
 
 
 class BadSimulation(Exception):
     pass
+
+
+def bump_pattern(n, skip=3):
+    # Generate the ascending sequence with the specified step
+    seq = list(range(0, abs(n) + 1, skip)) + list(range(abs(n) - skip, -1, -skip))
+    # Apply the negative sign if n is negative
+    return [x if n >= 0 else -x for x in seq]
 
 
 class Thing:
@@ -67,6 +76,9 @@ class Thing:
         self.visible = True
         self.fill_color = fill_color
 
+        self._x_bump = []
+        self._y_bump = []
+
     def get_color(self):
         return self.color
 
@@ -76,19 +88,42 @@ class Thing:
     def hide(self):
         self.visible = False
 
+    def bump_left(self, bump_dist=BUMP_DIST):
+        self._x_bump = bump_pattern(-bump_dist)
+
+    def bump_right(self, bump_dist=BUMP_DIST):
+        self._x_bump = bump_pattern(bump_dist)
+
+    def bump_up(self, bump_dist=BUMP_DIST):
+        self._y_bump = bump_pattern(-bump_dist)
+
+    def bump_down(self, bump_dist=BUMP_DIST):
+        self._y_bump = bump_pattern(bump_dist)
+
     def render(self, image, offset_x, offset_y):
         if not self.visible:
             return
         draw = ImageDraw.Draw(image)
-        draw.rectangle(
-            [
-                self.x_coord - offset_x,
-                self.y_coord - offset_y,
-                self.x_coord + self.width - offset_x,
-                self.y_coord + self.height - offset_y,
-            ],
-            fill=self.get_color(),
-        )
+        # Calculate the adjusted coordinates with bump included
+
+        x_bump = 0
+        y_bump = 0
+        if self._x_bump:
+            x_bump = self._x_bump.pop(0)
+        if self._y_bump:
+            y_bump = self._y_bump.pop(0)
+
+        x0 = max(self.x_coord - offset_x + x_bump, 0)
+        y0 = max(self.y_coord - offset_y + y_bump, 0)
+        x1 = min(self.x_coord + self.width - offset_x + x_bump, SCREEN_WIDTH)
+        y1 = min(self.y_coord + self.height - offset_y + y_bump, SCREEN_HEIGHT)
+
+        # Draw the rectangle within the screen boundaries
+        if x1 > x0 and y1 > y0:  # Ensuring x1 and y1 are greater than x0 and y0 respectively
+            draw.rectangle(
+                [x0, y0, x1, y1],
+                fill=self.get_color(),
+            )
 
     def in_frame(self, visible_bounds):
         """Check if the object is within the visible bounds."""
@@ -206,7 +241,7 @@ class Ball(Thing):
         future_y = self.y_coord + self.y_speed * frames
         return future_x, future_y
 
-    def move(self, platforms, walls, frame, visible_bounds):
+    def move(self, platforms, walls, frame, visible_bounds, bump_paddles=False):
         # Calculate potential next position of the ball
         next_x = self.x_coord
         next_y = self.y_coord
@@ -253,21 +288,29 @@ class Ball(Thing):
                     self.x_speed = -abs(self.x_speed)
                     # Reposition to the left of the platform
                     self.x_coord = plat_left - self.width
+                    if bump_paddles:
+                        platform.bump_right()
                 elif min_overlap == overlap_right:
                     # Maintain horizontal speed
                     self.x_speed = abs(self.x_speed)
                     # Reposition to the right of the platform
                     self.x_coord = plat_right
+                    if bump_paddles:
+                        platform.bump_left()
                 elif min_overlap == overlap_top:
                     # Reverse vertical speed
                     self.y_speed = -abs(self.y_speed)
                     # Reposition above the platform
                     self.y_coord = plat_top - self.height
+                    if bump_paddles:
+                        platform.bump_down()
                 elif min_overlap == overlap_bottom:
                     # Maintain vertical speed
                     self.y_speed = abs(self.y_speed)
                     # Reposition below the platform
                     self.y_coord = plat_bottom
+                    if bump_paddles:
+                        platform.bump_up()
 
                 platform.set_expected_bounce_frame(frame)
                 hit_platform = platform
@@ -368,7 +411,7 @@ class Scene:
         self.carved = carved
         self.walls = walls
 
-    def update(self, change_colors=False):
+    def update(self, change_colors=False, bump_paddles=False):
         self.frame_count += 1
 
         # When the platforms were not set, we are creating them
@@ -401,7 +444,7 @@ class Scene:
         # Move ball and check for collisions
         # If the walls are already carved, don't pass them into Move, since we can skip the collision checks
         if self.carved:
-            hit_platform = self.ball.move(self.platforms, [], self.frame_count, visible_bounds)
+            hit_platform = self.ball.move(self.platforms, [], self.frame_count, visible_bounds, bump_paddles)
         else:
             hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count, visible_bounds)
 
@@ -559,11 +602,12 @@ class Scene:
         change_colors=False,
         sustain_pedal=False,
         zoomed_out=False,
+        bump_paddles=False,
     ):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
         for _ in range(num_frames):
-            self.update(change_colors)
+            self.update(change_colors, bump_paddles=bump_paddles)
             if save_video:
                 if zoomed_out:
                     writer.append_data(np.array(self.render_full_image()))
@@ -738,7 +782,7 @@ def parse_animate_tracks(ctx, param, value):
     "--strategy",
     "-s",
     default=STRATEGY_RANDOM,
-    help="Show the entire scene in the video, no zoom",
+    help='"random" or "alternate" for platform orientation placement',
 )
 def main(
     midi,
@@ -813,6 +857,7 @@ def main(
         new_instrument,
         isolated_tracks,
         change_colors=True,
+        bump_paddles=True,
         sustain_pedal=sustain_pedal,
         zoomed_out=zoomed_out,
     )
