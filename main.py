@@ -13,25 +13,27 @@ from src.cache_stuff import get_cache_dir, cleanup_cache_dir
 from src.animation_stuff import animate_throb, lerp
 from src.color_stuff import fade_color, brighten_color
 
-BG_COLOR = "#d6d1cd"
-BALL_COLOR = "#e0194f"
-WALL_COLOR = "#3d3f41"
+BG_COLOR = "#a8a8a8"
+BALL_COLOR = "#f73e3e"
+BALL_FILL = BALL_COLOR
+WALL_COLOR = "#000000"
+RAND_COLORS = [
+    # WALL_COLOR,
+    "#2196F3",  # Blue
+    # "#4CAF50",  # Green
+    # "#FFC107",  # Amber
+    # "#9C27B0",  # Purple
+    # "#E91E63",  # Pink
+    # "#FFEB3B",  # Yellow
+    # "#00BCD4",  # Cyan
+    # "#FF5722",  # Deep Orange
+    # "#607D8B",  # Blue Grey
+    # "#795548",  # Brown
+]
+
 PADDLE_COLOR = WALL_COLOR
 HIT_SHRINK = 0.3
 HIT_ANIMATION_LENGTH = 8
-
-RAND_COLORS = [
-    "#4CAF50",  # Green
-    "#2196F3",  # Blue
-    "#FFC107",  # Amber
-    "#9C27B0",  # Purple
-    "#E91E63",  # Pink
-    "#FFEB3B",  # Yellow
-    "#00BCD4",  # Cyan
-    "#FF5722",  # Deep Orange
-    "#607D8B",  # Blue Grey
-    "#795548",  # Brown
-]
 
 SCREEN_WIDTH = 880
 SCREEN_HEIGHT = 1536
@@ -56,16 +58,20 @@ class BadSimulation(Exception):
 
 
 class Thing:
-    def __init__(self, x_coord, y_coord, width, height, color):
+    def __init__(self, x_coord, y_coord, width, height, color, fill_color=None):
         self.x_coord = x_coord
         self.y_coord = y_coord
         self.width = width
         self.height = height
         self.color = color
         self.visible = True
+        self.fill_color = fill_color
 
     def get_color(self):
         return self.color
+
+    def get_fill_color(self):
+        return self.fill_color
 
     def hide(self):
         self.visible = False
@@ -114,8 +120,8 @@ class Platform(Thing):
 
 
 class Ball(Thing):
-    def __init__(self, x_coord, y_coord, size, color, speed, show_carve=False):
-        super().__init__(x_coord, y_coord, size, size, color)
+    def __init__(self, x_coord, y_coord, size, color, speed, show_carve=False, fill_color=None):
+        super().__init__(x_coord, y_coord, size, size, color, fill_color)
         self.x_speed = speed
         self.y_speed = speed
         self.color_fade_frames_remaining = 0
@@ -162,8 +168,8 @@ class Ball(Thing):
         draw.rectangle(
             [left, top, right, bottom],
             outline=self.get_color(),
-            fill=None,
-            width=3,
+            fill=self.get_fill_color(),
+            width=2,
         )
 
         if self.show_carve:
@@ -592,13 +598,13 @@ def choices_are_valid(note_frames, boolean_choice_list):
     num_frames = max(choices.keys())
 
     # First - Run Choices through empty Environment to place the Platforms
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=False, fill_color=BALL_FILL)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
     for _ in range(num_frames):
         scene.update()
 
     # Then - Check if Scene is valid when platforms placed at start
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=False, fill_color=BALL_FILL)
     platforms = scene.platforms
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball)
     scene.set_platforms(platforms)
@@ -775,7 +781,7 @@ def main(
     num_frames = max(choices.keys())
 
     click.echo(f"\nRunning simulation to place {num_platforms} platforms...")
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=False, fill_color=BALL_FILL)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames, choices)
     scene.run_simulation(midi, f"{song_name}-platforms", num_frames, show_platform, new_instrument, isolated_tracks)
 
@@ -786,7 +792,7 @@ def main(
     # Run the next simulation with the platforms and walls in place, and carve the walls
     click.echo(f"\nRunning the simulation again to carve {len(walls)} walls)...")
     platforms = scene.platforms
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=show_carve)
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=False, fill_color=BALL_FILL)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
@@ -795,7 +801,7 @@ def main(
     # Run the final simulation with the platforms and carved walls in place
     carved_walls = scene.walls
     click.echo(f"\nRunning the simulation again to make the video...")
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED)
+    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=False, fill_color=BALL_FILL)
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(carved_walls, carved=True)

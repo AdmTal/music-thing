@@ -14,40 +14,47 @@ from src.cache_stuff import get_cache_dir, cleanup_cache_dir
 from src.animation_stuff import lerp, animate_throb
 from src.color_stuff import hex_to_rgba
 
-BG_COLOR = "#d6d1cd"
-BALL_COLOR = "#e0194f"
+# BG_COLOR = "#d6d1cd"
+BG_COLOR = "#a8a8a8"
+
+# BALL_COLOR = "#e0194f"
+BALL_COLOR = "#f73e3e"
+
+# WALL_COLOR = "#000000"
 WALL_COLOR = "#3d3f41"
+
 PADDLE_COLOR = WALL_COLOR
-HIT_SHRINK = 0.3
-HIT_ANIMATION_LENGTH = 8
+HIT_SHRINK = 0.5
+HIT_ANIMATION_LENGTH = 15
 
 RAND_COLORS = [
-    "#4CAF50",  # Green
-    "#2196F3",  # Blue
-    "#FFC107",  # Amber
-    "#9C27B0",  # Purple
-    "#E91E63",  # Pink
-    "#FFEB3B",  # Yellow
-    "#00BCD4",  # Cyan
-    "#FF5722",  # Deep Orange
-    "#607D8B",  # Blue Grey
-    "#795548",  # Brown
+    WALL_COLOR,
+    # "#4CAF50",  # Green
+    # "#2196F3",  # Blue
+    # "#FFC107",  # Amber
+    # "#9C27B0",  # Purple
+    # "#E91E63",  # Pink
+    # "#FFEB3B",  # Yellow
+    # "#00BCD4",  # Cyan
+    # "#FF5722",  # Deep Orange
+    # "#607D8B",  # Blue Grey
+    # "#795548",  # Brown
 ]
 
 SCREEN_WIDTH = 8
 SCREEN_HEIGHT = 15
 DEPTH = 2
-CAM_DEPTH = -23
+CAM_DEPTH = -25
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
 
 UNIT_TO_PX = 60
-BALL_SIZE = .75
+BALL_SIZE = .6
 PLATFORM_HEIGHT = BALL_SIZE * 2
 PLATFORM_WIDTH = BALL_SIZE
 
-BALL_SPEED = 0.2
+BALL_SPEED = 0.35
 ALPHA = BALL_SPEED / 8
 FPS = 60
 FRAME_BUFFER = 15
