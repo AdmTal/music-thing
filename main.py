@@ -20,20 +20,20 @@ WALL_COLOR = "#000000"
 PADDLE_COLOR = WALL_COLOR
 
 RAND_COLORS = [
-    "#2196F3",  # Blue
+    # "#2196F3",  # Blue
     # "#4CAF50",  # Green
     # "#FFC107",  # Amber
     # "#9C27B0",  # Purple
     # "#E91E63",  # Pink
-    # "#FFEB3B",  # Yellow
+    "#FFEB3B",  # Yellow
     # "#00BCD4",  # Cyan
     # "#FF5722",  # Deep Orange
     # "#607D8B",  # Blue Grey
     # "#795548",  # Brown
 ]
 
-SCREEN_WIDTH = 576
-SCREEN_HEIGHT = 1024
+SCREEN_WIDTH = int(576 * 1.5)
+SCREEN_HEIGHT = int(1024 * 1.5)
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
@@ -188,7 +188,7 @@ class Ball(Thing):
         return max(0, x - y) if x > 0 else min(0, x + y)
 
     def tick_fix_box_modifiers(self):
-        fix_speed = 2
+        fix_speed = 1.5
         self._box_modifiers = [
             self.fix_box_modifiers(self._box_modifiers[0], fix_speed),
             self.fix_box_modifiers(self._box_modifiers[1], fix_speed),
