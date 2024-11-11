@@ -3,6 +3,7 @@ import click
 import imageio
 import numpy as np
 import random
+import math
 
 from src.midi_stuff import (
     get_frames_where_notes_happen,
@@ -10,13 +11,14 @@ from src.midi_stuff import (
 )
 from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir, cleanup_cache_dir
-from src.animation_stuff import animate_throb, lerp
-from src.color_stuff import fade_color, brighten_color
+from src.animation_stuff import lerp
 
 BG_COLOR = "#a8a8a8"
-BALL_COLOR = "#f73e3e"
-BALL_FILL = BALL_COLOR
+BALL_COLOR = "#000000"
+BALL_FILL = "#f73e3e"
 WALL_COLOR = "#000000"
+PADDLE_COLOR = WALL_COLOR
+
 RAND_COLORS = [
     # WALL_COLOR,
     "#2196F3",  # Blue
@@ -31,12 +33,8 @@ RAND_COLORS = [
     # "#795548",  # Brown
 ]
 
-PADDLE_COLOR = WALL_COLOR
-HIT_SHRINK = 0.3
-HIT_ANIMATION_LENGTH = 8
-
-SCREEN_WIDTH = 880
-SCREEN_HEIGHT = 1536
+SCREEN_WIDTH = 576
+SCREEN_HEIGHT = 1024
 
 BALL_START_X = SCREEN_WIDTH // 2
 BALL_START_Y = SCREEN_HEIGHT // 2
@@ -45,11 +43,15 @@ BALL_SIZE = 35
 PLATFORM_HEIGHT = BALL_SIZE
 PLATFORM_WIDTH = BALL_SIZE // 3
 
+A_STRETCH = BALL_SIZE // 4
+B_STRETCH = BALL_SIZE // 6
+C_STRETCH = 10
+
 BALL_SPEED = 10
 FPS = 60
 FRAME_BUFFER = 15
 
-BUMP_DIST = BALL_SPEED
+BUMP_DIST = math.floor(BALL_SPEED * 1.5)
 
 STRATEGY_RANDOM = "random"
 STRATEGY_ALTERNATE = "alternate"
@@ -159,11 +161,8 @@ class Ball(Thing):
         super().__init__(x_coord, y_coord, size, size, color, fill_color)
         self.x_speed = speed
         self.y_speed = speed
-        self.color_fade_frames_remaining = 0
-        self.size_fade_frames_remaining = 0
         self.original_color = color
-        self.original_size = size
-        self.current_size = size
+        self.size = size
 
         self._carve_top_left_corner = None
         self._carve_top_right_corner = None
@@ -171,41 +170,54 @@ class Ball(Thing):
         self._carve_bottom_right_corner = None
         self._initialize_carve_square()
         self.show_carve = show_carve
+        self._box_modifiers = [0, 0, 0, 0, 0, 0]  # L, T, R, B, X, Y
 
-    def hit(self):
-        self.color_fade_frames_remaining = HIT_ANIMATION_LENGTH // 2
-        self.size_fade_frames_remaining = HIT_ANIMATION_LENGTH
+    def hit(self, direction):
+        # If hit on the SIDES, will get skinny + tall
+        tilt = (A_STRETCH // 2) + C_STRETCH
+        if direction == "top":
+            self._box_modifiers = [-A_STRETCH, B_STRETCH, A_STRETCH, -B_STRETCH, 0, -tilt]
+        if direction == "bottom":
+            self._box_modifiers = [-A_STRETCH, B_STRETCH, A_STRETCH, -B_STRETCH, 0, tilt]
+        if direction in "left":
+            self._box_modifiers = [B_STRETCH, -A_STRETCH, -B_STRETCH, A_STRETCH, -tilt, 0]
+        if direction in "right":
+            self._box_modifiers = [B_STRETCH, -A_STRETCH, -B_STRETCH, A_STRETCH, tilt, 0]
+
+    @staticmethod
+    def fix_box_modifiers(x):
+        if x > 0:
+            x -= 1
+        elif x < 0:
+            x += 1
+        return x
+
+    def tick_fix_box_modifiers(self):
+        self._box_modifiers = [
+            self.fix_box_modifiers(self._box_modifiers[0]),
+            self.fix_box_modifiers(self._box_modifiers[1]),
+            self.fix_box_modifiers(self._box_modifiers[2]),
+            self.fix_box_modifiers(self._box_modifiers[3]),
+            self.fix_box_modifiers(self._box_modifiers[4]),
+            self.fix_box_modifiers(self._box_modifiers[5]),
+        ]
 
     def render(self, image, offset_x, offset_y):
+        ld, rd, td, bd, xd, yd = self._box_modifiers
         draw = ImageDraw.Draw(image)
-        # Calculate the size reduction effect
-        if self.size_fade_frames_remaining > 0:
-            throb = animate_throb(
-                -self.size_fade_frames_remaining,
-                peak=HIT_ANIMATION_LENGTH // 2,
-                width=HIT_ANIMATION_LENGTH,
-            )
-            factor = 1 - HIT_SHRINK * (throb / HIT_ANIMATION_LENGTH)
-            spacer_factor = 1 - factor
-            self.current_size = int(self.original_size * factor)
-            spacer = int(self.current_size * spacer_factor)
-            self.size_fade_frames_remaining -= 1
-            left = self.x_coord - offset_x + spacer
-            right = self.x_coord - offset_x + self.current_size
-            top = self.y_coord - offset_y + spacer
-            bottom = self.y_coord - offset_y + self.current_size
-        else:
-            self.current_size = self.original_size
-            left = self.x_coord - offset_x
-            right = self.x_coord - offset_x + self.current_size
-            top = self.y_coord - offset_y
-            bottom = self.y_coord - offset_y + self.current_size
+        left = self.x_coord - offset_x + xd
+        right = self.x_coord - offset_x + self.size + xd
+        top = self.y_coord - offset_y + yd
+        bottom = self.y_coord - offset_y + self.size + yd
+
         draw.rectangle(
-            [left, top, right, bottom],
+            [left + ld, top + td, right + rd, bottom + bd],
             outline=self.get_color(),
             fill=self.get_fill_color(),
             width=2,
         )
+
+        self.tick_fix_box_modifiers()
 
         if self.show_carve:
             corners = [
@@ -225,15 +237,6 @@ class Ball(Thing):
             draw.rectangle([(min_x, min_y), (max_x, max_y)], outline="red", width=3)
 
     def get_color(self):
-        if self.color_fade_frames_remaining > 0:
-            faded_color = fade_color(
-                brighten_color(self.original_color),
-                self.original_color,
-                HIT_ANIMATION_LENGTH,
-                self.color_fade_frames_remaining,
-            )
-            self.color_fade_frames_remaining -= 1
-            return faded_color
         return self.original_color
 
     def predict_position(self, frames=1):
@@ -283,6 +286,7 @@ class Ball(Thing):
                 min_overlap = min(overlap_left, overlap_right, overlap_top, overlap_bottom)
 
                 # Adjust ball's speed and position based on the minimal overlap side
+                ball_hit_on = ""
                 if min_overlap == overlap_left:
                     # Reverse horizontal speed
                     self.x_speed = -abs(self.x_speed)
@@ -290,6 +294,7 @@ class Ball(Thing):
                     self.x_coord = plat_left - self.width
                     if bump_paddles:
                         platform.bump_right()
+                        ball_hit_on = "right"
                 elif min_overlap == overlap_right:
                     # Maintain horizontal speed
                     self.x_speed = abs(self.x_speed)
@@ -297,6 +302,7 @@ class Ball(Thing):
                     self.x_coord = plat_right
                     if bump_paddles:
                         platform.bump_left()
+                        ball_hit_on = "left"
                 elif min_overlap == overlap_top:
                     # Reverse vertical speed
                     self.y_speed = -abs(self.y_speed)
@@ -304,6 +310,7 @@ class Ball(Thing):
                     self.y_coord = plat_top - self.height
                     if bump_paddles:
                         platform.bump_down()
+                        ball_hit_on = "bottom"
                 elif min_overlap == overlap_bottom:
                     # Maintain vertical speed
                     self.y_speed = abs(self.y_speed)
@@ -311,18 +318,16 @@ class Ball(Thing):
                     self.y_coord = plat_bottom
                     if bump_paddles:
                         platform.bump_up()
+                        ball_hit_on = "top"
 
                 platform.set_expected_bounce_frame(frame)
                 hit_platform = platform
-                self.hit()
+                self.hit(ball_hit_on)
                 break
 
         # Update the ball's position with the potentially new speed
         self.x_coord += self.x_speed
         self.y_coord += self.y_speed
-
-        if is_carving and hit_platform:
-            self._initialize_carve_square()
 
         for wall in walls:
             if not wall.in_frame(visible_bounds):
@@ -344,6 +349,9 @@ class Ball(Thing):
 
         if is_carving:
             self._update_carve_square()
+
+        if is_carving and hit_platform:
+            self._initialize_carve_square()
 
         return hit_platform
 
@@ -371,13 +379,13 @@ class Ball(Thing):
 
     def _update_carve_square(self):
         if self._locked_corner == "top_left":
-            self._carve_bottom_right_corner = (self.x_coord + self.width + 1, self.y_coord + self.height + 1)
+            self._carve_bottom_right_corner = (self.x_coord + self.width + 1, self.y_coord + self.height)
         elif self._locked_corner == "top_right":
-            self._carve_bottom_left_corner = (self.x_coord - 1, self.y_coord + self.height + 1)
+            self._carve_bottom_left_corner = (self.x_coord - 1, self.y_coord + self.height)
         elif self._locked_corner == "bottom_left":
-            self._carve_top_right_corner = (self.x_coord + self.width + 1, self.y_coord - 1)
+            self._carve_top_right_corner = (self.x_coord + self.width + 1, self.y_coord)
         elif self._locked_corner == "bottom_right":
-            self._carve_top_left_corner = (self.x_coord - 1, self.y_coord - 1)
+            self._carve_top_left_corner = (self.x_coord - 1, self.y_coord)
 
 
 class Scene:
@@ -479,14 +487,14 @@ class Scene:
             self.offset_y + self.screen_height,
         )
 
-        # Only render the ball if it's within the visible area
-        if self.ball.in_frame(visible_bounds):
-            self.ball.render(image, self.offset_x, self.offset_y)
-
         # Only render walls and platforms if they are within the visible area
         for obj in self.walls + self.platforms:
             if obj.in_frame(visible_bounds):
                 obj.render(image, self.offset_x, self.offset_y)
+
+        # Only render the ball if it's within the visible area
+        if self.ball.in_frame(visible_bounds):
+            self.ball.render(image, self.offset_x, self.offset_y)
 
         return image
 
@@ -503,7 +511,7 @@ class Scene:
         )
 
         # Smoothing factor
-        alpha = BALL_SPEED / 250
+        alpha = BALL_SPEED / 150
 
         # Update camera offsets using linear interpolation for smoother movement
         self.offset_x = lerp(self.offset_x, desired_offset_x, alpha)
