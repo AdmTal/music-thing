@@ -20,7 +20,6 @@ WALL_COLOR = "#000000"
 PADDLE_COLOR = WALL_COLOR
 
 RAND_COLORS = [
-    # WALL_COLOR,
     "#2196F3",  # Blue
     # "#4CAF50",  # Green
     # "#FFC107",  # Amber
@@ -43,11 +42,11 @@ BALL_SIZE = 35
 PLATFORM_HEIGHT = BALL_SIZE
 PLATFORM_WIDTH = BALL_SIZE // 3
 
-A_STRETCH = BALL_SIZE // 4
-B_STRETCH = BALL_SIZE // 6
+A_STRETCH = BALL_SIZE // 3
+B_STRETCH = BALL_SIZE // 5
 C_STRETCH = 10
 
-BALL_SPEED = 10
+BALL_SPEED = 9
 FPS = 60
 FRAME_BUFFER = 15
 
@@ -185,21 +184,18 @@ class Ball(Thing):
             self._box_modifiers = [B_STRETCH, -A_STRETCH, -B_STRETCH, A_STRETCH, tilt, 0]
 
     @staticmethod
-    def fix_box_modifiers(x):
-        if x > 0:
-            x -= 1
-        elif x < 0:
-            x += 1
-        return x
+    def fix_box_modifiers(x, y=1):
+        return max(0, x - y) if x > 0 else min(0, x + y)
 
     def tick_fix_box_modifiers(self):
+        fix_speed = 2
         self._box_modifiers = [
-            self.fix_box_modifiers(self._box_modifiers[0]),
-            self.fix_box_modifiers(self._box_modifiers[1]),
-            self.fix_box_modifiers(self._box_modifiers[2]),
-            self.fix_box_modifiers(self._box_modifiers[3]),
-            self.fix_box_modifiers(self._box_modifiers[4]),
-            self.fix_box_modifiers(self._box_modifiers[5]),
+            self.fix_box_modifiers(self._box_modifiers[0], fix_speed),
+            self.fix_box_modifiers(self._box_modifiers[1], fix_speed),
+            self.fix_box_modifiers(self._box_modifiers[2], fix_speed),
+            self.fix_box_modifiers(self._box_modifiers[3], fix_speed),
+            self.fix_box_modifiers(self._box_modifiers[4], fix_speed),
+            self.fix_box_modifiers(self._box_modifiers[5], fix_speed),
         ]
 
     def render(self, image, offset_x, offset_y):
@@ -329,6 +325,9 @@ class Ball(Thing):
         self.x_coord += self.x_speed
         self.y_coord += self.y_speed
 
+        if is_carving:
+            self._update_carve_square()
+
         for wall in walls:
             if not wall.in_frame(visible_bounds):
                 continue
@@ -346,9 +345,6 @@ class Ball(Thing):
                 and ball_top <= wall.y_coord + wall.height
             ):
                 wall.hide()
-
-        if is_carving:
-            self._update_carve_square()
 
         if is_carving and hit_platform:
             self._initialize_carve_square()
@@ -379,13 +375,13 @@ class Ball(Thing):
 
     def _update_carve_square(self):
         if self._locked_corner == "top_left":
-            self._carve_bottom_right_corner = (self.x_coord + self.width + 1, self.y_coord + self.height)
+            self._carve_bottom_right_corner = (self.x_coord + self.width, self.y_coord + self.height)
         elif self._locked_corner == "top_right":
-            self._carve_bottom_left_corner = (self.x_coord - 1, self.y_coord + self.height)
+            self._carve_bottom_left_corner = (self.x_coord, self.y_coord + self.height)
         elif self._locked_corner == "bottom_left":
-            self._carve_top_right_corner = (self.x_coord + self.width + 1, self.y_coord)
+            self._carve_top_right_corner = (self.x_coord + self.width, self.y_coord)
         elif self._locked_corner == "bottom_right":
-            self._carve_top_left_corner = (self.x_coord - 1, self.y_coord)
+            self._carve_top_left_corner = (self.x_coord, self.y_coord)
 
 
 class Scene:
