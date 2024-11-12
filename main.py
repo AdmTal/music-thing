@@ -13,24 +13,25 @@ from src.video_stuff import finalize_video_with_music
 from src.cache_stuff import get_cache_dir, cleanup_cache_dir
 from src.animation_stuff import lerp
 
-BG_COLOR = "#a8a8a8"
-BALL_COLOR = "#000000"
-BALL_FILL = "#f73e3e"
-WALL_COLOR = "#000000"
+# Define main colors for the game elements
+BG_COLOR = "#b1afaf"
+BALL_COLOR = "#2c2c2c"
+BALL_FILL = "#ff6347"
+WALL_COLOR = "#666666"
 PADDLE_COLOR = WALL_COLOR
 
 RAND_COLORS = [
-    # "#2196F3",  # Blue
-    # "#4CAF50",  # Green
-    # "#FFC107",  # Amber
-    # "#9C27B0",  # Purple
-    # "#E91E63",  # Pink
-    "#FFEB3B",  # Yellow
-    # "#00BCD4",  # Cyan
-    # "#FF5722",  # Deep Orange
-    # "#607D8B",  # Blue Grey
-    # "#795548",  # Brown
+    "#42a5f5",  # Light Blue
+    "#26a69a",  # Teal
+    "#ef5350",  # Soft Red
 ]
+
+PARTICLE_COLORS = [
+    "#ffeb3b",  # Vivid Yellow
+    "#ff9800",  # Orange
+    "#cddc39",  # Lime Green
+]
+
 
 SCREEN_WIDTH = int(576 * 1.5)
 SCREEN_HEIGHT = int(1024 * 1.5)
@@ -142,10 +143,108 @@ class Wall(Thing):
     pass
 
 
+class Particle:
+    def __init__(self, x, y, vx, vy, color, lifespan, size):
+        self.x = x
+        self.y = y
+        self.vx = vx
+        self.vy = vy
+        self.color = color
+        self.lifespan = lifespan
+        self.original_lifespan = lifespan  # Storing the original lifespan for reference
+        self.size = size
+        self.drag = random.uniform(0.85, 0.95)
+        self.shrinking_start = random.randint(
+            int(0.7 * lifespan), int(0.9 * lifespan)
+        )  # Start shrinking randomly between 70% to 90% of lifespan
+
+    def update(self):
+        """Update the particle's position, reduce its lifespan, apply drag, and handle shrinking."""
+        self.vx *= self.drag
+        self.vy *= self.drag
+
+        self.x += self.vx
+        self.y += self.vy
+        self.lifespan -= 1
+
+        # Check if it's time to start shrinking the particle
+        if self.lifespan <= self.shrinking_start:
+            self.size -= self.size * 0.1  # Reduce size by 10% of its current size each frame
+            if self.size < 1:
+                self.size = 0  # Ensure size doesn't go negative
+
+    def render(self, image, offset_x, offset_y):
+        """Render the particle if it's still alive and has a size greater than zero."""
+        if self.lifespan > 0 and self.size > 0:
+            draw = ImageDraw.Draw(image)
+            radius = self.size
+            draw.ellipse(
+                [
+                    (self.x - radius - offset_x, self.y - radius - offset_y),
+                    (self.x + radius - offset_x, self.y + radius - offset_y),
+                ],
+                fill=self.color,
+            )
+
+
 class Platform(Thing):
     def __init__(self, x_coord, y_coord, width, height, color):
         super().__init__(x_coord, y_coord, width, height, color)
         self._expected_bounce_frame = None
+        self.particles = []
+
+    def emit_particles(self, direction):
+        """Emit particles in the opposite direction of the hit."""
+        num_particles = 15
+        particle_speed = BALL_SPEED / 1.5
+        particle_lifespan = 20
+
+        for _ in range(num_particles):
+            angle = random.uniform(0, 2 * math.pi)  # Generate a random angle
+            speed_modifier = random.uniform(0.5, 1.5)  # Randomize the speed for burstiness
+
+            # Maintain the direction logic but add randomness to the speed
+            if "right" in direction:
+                vx = -particle_speed * speed_modifier * abs(math.cos(angle))  # Emit left
+            elif "left" in direction:
+                vx = particle_speed * speed_modifier * abs(math.cos(angle))  # Emit right
+            else:
+                # Randomize vx for top and bottom to spread particles horizontally
+                vx = particle_speed * speed_modifier * math.cos(angle) * random.choice([-1, 1])
+
+            if "top" in direction:
+                vy = particle_speed * speed_modifier * abs(math.sin(angle))  # Emit downward
+            elif "bottom" in direction:
+                vy = -particle_speed * speed_modifier * abs(math.sin(angle))  # Emit upward
+            else:
+                # Randomize vy for left and right to spread particles vertically
+                vy = particle_speed * speed_modifier * math.sin(angle) * random.choice([-1, 1])
+
+            particle_size = random.uniform(3, 6)  # Random size between 1 and 3 pixels
+            color = random.choice(PARTICLE_COLORS)  # Choose a random bright color
+            self.particles.append(
+                Particle(
+                    self.x_coord + self.width // 2,
+                    self.y_coord + self.height // 2,
+                    vx,
+                    vy,
+                    color,
+                    particle_lifespan,
+                    particle_size,
+                ),
+            )
+
+    def update_particles(self):
+        """Update all particles and remove the dead ones."""
+        for particle in self.particles[:]:
+            particle.update()
+            if particle.lifespan <= 0:
+                self.particles.remove(particle)
+
+    def render(self, image, offset_x, offset_y):
+        for particle in self.particles:
+            particle.render(image, offset_x, offset_y)
+        super().render(image, offset_x, offset_y)
 
     def set_expected_bounce_frame(self, frame):
         if self._expected_bounce_frame:
@@ -292,6 +391,7 @@ class Ball(Thing):
                     if bump_paddles:
                         platform.bump_right()
                         ball_hit_on = "right"
+                        platform.emit_particles("left")
                 elif min_overlap == overlap_right:
                     # Maintain horizontal speed
                     self.x_speed = abs(self.x_speed)
@@ -300,6 +400,7 @@ class Ball(Thing):
                     if bump_paddles:
                         platform.bump_left()
                         ball_hit_on = "left"
+                        platform.emit_particles("right")
                 elif min_overlap == overlap_top:
                     # Reverse vertical speed
                     self.y_speed = -abs(self.y_speed)
@@ -308,6 +409,7 @@ class Ball(Thing):
                     if bump_paddles:
                         platform.bump_down()
                         ball_hit_on = "bottom"
+                        platform.emit_particles("top")
                 elif min_overlap == overlap_bottom:
                     # Maintain vertical speed
                     self.y_speed = abs(self.y_speed)
@@ -316,6 +418,7 @@ class Ball(Thing):
                     if bump_paddles:
                         platform.bump_up()
                         ball_hit_on = "top"
+                        platform.emit_particles("bottom")
 
                 platform.set_expected_bounce_frame(frame)
                 hit_platform = platform
@@ -455,6 +558,9 @@ class Scene:
             hit_platform = self.ball.move(self.platforms, self.walls, self.frame_count, visible_bounds)
 
         self.adjust_camera()
+
+        for platform in self.platforms:
+            platform.update_particles()
 
         if change_colors and hit_platform:
             hit_platform.color = random.choice(RAND_COLORS)
