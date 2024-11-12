@@ -49,6 +49,7 @@ C_STRETCH = 10
 BALL_SPEED = 9
 FPS = 60
 FRAME_BUFFER = 15
+END_VIDEO_FREEZE_SECONDS = 3
 
 BUMP_DIST = math.floor(BALL_SPEED * 1.5)
 
@@ -610,6 +611,7 @@ class Scene:
     ):
         video_file = f"{get_cache_dir()}/{filename}.mp4"
         writer = imageio.get_writer(video_file, fps=FPS)
+
         for _ in range(num_frames):
             self.update(change_colors, bump_paddles=bump_paddles)
             if save_video:
@@ -621,6 +623,13 @@ class Scene:
             click.echo(f"\r{progress:0.0f}% ({self.frame_count} frames)", nl=False)
 
         if save_video:
+            # "Pause" for a few seconds
+            for _ in range(FPS * END_VIDEO_FREEZE_SECONDS):
+                if zoomed_out:
+                    writer.append_data(np.array(self.render_full_image()))
+                else:
+                    writer.append_data(np.array(self.render()))
+
             click.echo(f"\nGenerating the {filename} video...")
             vid_name = finalize_video_with_music(
                 writer,
@@ -635,7 +644,7 @@ class Scene:
                 isolated_tracks,
                 sustain_pedal,
             )
-            self.render_full_image().save(f"{vid_name.split('.mp4')[0]}.png")
+            # self.render_full_image().save(f"{vid_name.split('.mp4')[0]}.png")
 
 
 def choices_are_valid(note_frames, boolean_choice_list):
@@ -840,7 +849,9 @@ def main(
     # Run the next simulation with the platforms and walls in place, and carve the walls
     click.echo(f"\nRunning the simulation again to carve {len(walls)} walls)...")
     platforms = scene.platforms
-    ball = Ball(BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=False, fill_color=BALL_FILL)
+    ball = Ball(
+        BALL_START_X, BALL_START_Y, BALL_SIZE, BALL_COLOR, BALL_SPEED, show_carve=show_carve, fill_color=BALL_FILL
+    )
     scene = Scene(SCREEN_WIDTH, SCREEN_HEIGHT, ball, note_frames)
     scene.set_platforms(platforms)
     scene.set_walls(walls)
