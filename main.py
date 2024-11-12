@@ -231,7 +231,7 @@ class Ball(Thing):
             min_y = min(adjusted_corners, key=lambda t: t[1])[1]
             max_y = max(adjusted_corners, key=lambda t: t[1])[1]
             # Draw the rectangle using the top-left and bottom-right corners
-            draw.rectangle([(min_x, min_y), (max_x, max_y)], outline="red", width=3)
+            draw.rectangle([(min_x, min_y), (max_x, max_y)], outline="red", width=1)
 
     def get_color(self):
         return self.original_color
@@ -333,10 +333,11 @@ class Ball(Thing):
             if not wall.in_frame(visible_bounds):
                 continue
             # Get the minimum and maximum x and y values from the carving corners
-            ball_left = min(self._carve_top_left_corner[0], self._carve_bottom_left_corner[0])
-            ball_right = max(self._carve_top_right_corner[0], self._carve_bottom_right_corner[0])
-            ball_top = min(self._carve_top_left_corner[1], self._carve_top_right_corner[1])
-            ball_bottom = max(self._carve_bottom_left_corner[1], self._carve_bottom_right_corner[1])
+            buffer = PLATFORM_WIDTH
+            ball_left = min(self._carve_top_left_corner[0], self._carve_bottom_left_corner[0]) + buffer
+            ball_right = max(self._carve_top_right_corner[0], self._carve_bottom_right_corner[0]) - buffer
+            ball_top = min(self._carve_top_left_corner[1], self._carve_top_right_corner[1]) + buffer
+            ball_bottom = max(self._carve_bottom_left_corner[1], self._carve_bottom_right_corner[1]) - buffer
 
             # Check collision with wall
             if (
